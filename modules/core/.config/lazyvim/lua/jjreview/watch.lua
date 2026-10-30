@@ -26,19 +26,46 @@ local function repo_dir(root)
   return vim.uv.fs_realpath(target)
 end
 
+local function debounced(on_change)
+  local timer = assert(vim.uv.new_timer())
+  return function()
+    timer:stop()
+    timer:start(DEBOUNCE_MS, 0, vim.schedule_wrap(on_change))
+  end
+end
+
+local function watch(path, flags, on_event)
+  if watchers[path] then
+    return
+  end
+  local event = assert(vim.uv.new_fs_event())
+  event:start(path, flags, on_event)
+  watchers[path] = event
+end
+
+-- Every snapshot writes below .jj, and colocated repos write below .git,
+-- so events there would loop.
+local function is_metadata(name)
+  local padded = "/" .. (name or "") .. "/"
+  return padded:find("/.jj/", 1, true) or padded:find("/.git/", 1, true)
+end
+
+-- Watches the operation heads of root's repo and the files of root. A
+-- file edit reaches jj only through a snapshot, which on_change takes by
+-- running jj. libuv watches recursively on macOS and Windows only.
 function M.start(root, on_change)
   local repo = repo_dir(root)
-  if not repo or watchers[repo] then
+  if not repo then
     return
   end
 
-  local event = assert(vim.uv.new_fs_event())
-  local timer = assert(vim.uv.new_timer())
-  event:start(vim.fs.joinpath(repo, "op_heads", "heads"), {}, function()
-    timer:stop()
-    timer:start(DEBOUNCE_MS, 0, vim.schedule_wrap(on_change))
+  watch(vim.fs.joinpath(repo, "op_heads", "heads"), {}, debounced(on_change))
+  local on_file = debounced(on_change)
+  watch(root, { recursive = true }, function(_, name)
+    if not is_metadata(name) then
+      on_file()
+    end
   end)
-  watchers[repo] = event
 end
 
 return M

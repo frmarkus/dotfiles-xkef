@@ -5,6 +5,9 @@ local jj = require("jjreview.jj")
 
 local M = {}
 
+local ADD = "+ Add workspace"
+local REMOVE = "- Remove workspace"
+
 local TEMPLATE = 'name ++ "\t" ++ root ++ "\t" ++ target.change_id().shortest(8) ++ " "'
   .. ' ++ coalesce(target.description().first_line(), "(no description)") ++ "\n"'
 
@@ -45,26 +48,26 @@ local function switch(workspace)
   end
 end
 
-local function pick(prompt, workspaces, on_choice)
-  vim.ui.select(workspaces, {
+-- Items are workspaces or action labels.
+local function pick(prompt, items, on_choice)
+  vim.ui.select(items, {
     prompt = prompt,
-    format_item = function(ws)
-      return ("%-16s %s  %s"):format(ws.name, ws.summary, vim.fn.fnamemodify(ws.root, ":~"))
+    format_item = function(item)
+      if type(item) == "string" then
+        return item
+      end
+      return ("%-16s %s  %s"):format(item.name, item.summary, vim.fn.fnamemodify(item.root, ":~"))
     end,
-  }, function(ws)
-    if ws then
-      on_choice(ws)
+  }, function(item)
+    if item then
+      on_choice(item)
     end
   end)
 end
 
-function M.pick()
-  pick("jj workspace", list(), switch)
-end
-
 -- Adds a workspace whose working copy starts on the revision selected in
 -- the review panel, or on @.
-function M.add()
+local function add()
   local workspaces = list()
   if #workspaces == 0 then
     return
@@ -92,7 +95,7 @@ end
 
 -- Deletes a workspace and its files, after the user confirms, and closes
 -- its tab.
-function M.remove()
+local function remove()
   local others = vim.tbl_filter(function(ws)
     return ws.name ~= "default"
   end, list())
@@ -107,6 +110,20 @@ function M.remove()
       vim.cmd.tabclose(vim.api.nvim_tabpage_get_number(tab))
     end
     jj.run({ "workspace", "remove", ws.name })
+  end)
+end
+
+-- Switches to a workspace, or adds or removes one.
+function M.pick()
+  local items = vim.list_extend(list(), { ADD, REMOVE })
+  pick("jj workspace", items, function(item)
+    if item == ADD then
+      add()
+    elseif item == REMOVE then
+      remove()
+    else
+      switch(item)
+    end
   end)
 end
 

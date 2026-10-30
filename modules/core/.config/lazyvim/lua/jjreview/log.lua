@@ -69,7 +69,7 @@ local KEYS = {
   { "gb", "bookmark", "Set a bookmark on the change" },
   { "u", "undo", "Undo the last jj operation" },
   { "<C-r>", "redo", "Redo the last undone operation" },
-  { "/", "revset", "Edit the revset" },
+  { "/", "revset", "Pick or edit the revset" },
   { "D", "diff", "Open the targets in diffview" },
   { "y", "yank", "Copy the change ID" },
   { "R", "refresh", "Refresh" },
@@ -475,12 +475,8 @@ function actions.redo(s)
   run(s, { "redo" })
 end
 
-function actions.revset(s)
-  vim.ui.input({ prompt = "Revset: ", default = s.revset }, function(revset)
-    if revset and revset ~= "" then
-      panel().set_revset(revset)
-    end
-  end)
+function actions.revset()
+  panel().pick_revset()
 end
 
 function actions.diff(s)

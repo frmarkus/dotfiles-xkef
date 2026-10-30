@@ -26,8 +26,8 @@ local SELECT_DELAY_MS = 80
 local DEFAULT_WIDTH = 40
 local LOG_HEIGHT = 0.6
 
--- Panel state per tabpage: { revset, cursor, marks, rows, log_buf,
--- log_win, tree_win, files }. cursor and marks hold full change IDs.
+-- Panel state per tabpage: { root, revset, cursor, marks, rows,
+-- log_buf, log_win, tree_win, files }. cursor and marks hold full change IDs.
 local tabs = {}
 local revset_history = {}
 local gitdirs = {}
@@ -280,34 +280,6 @@ function M.summary()
   return count > 0 and ("%s  %d marked"):format(s.revset, count) or s.revset
 end
 
--- Focuses the log, opening the panel first when needed.
-function M.show_log()
-  if not M.active() then
-    M.toggle()
-  end
-  local s = state()
-  if s and vim.api.nvim_win_is_valid(s.log_win) then
-    vim.api.nvim_set_current_win(s.log_win)
-  end
-end
-
--- The working copy's status in the sidebar: the selection moves to @
--- and its files take focus.
-function M.show_status()
-  if not M.active() then
-    M.toggle()
-  end
-  local s = state()
-  local wc = s and jj.revisions("@")[1]
-  if not wc then
-    return
-  end
-  s.marks, s.cursor = {}, wc.id
-  log.render(s)
-  refresh_tree()
-  M.focus_files()
-end
-
 function M.focus_files()
   local s = state()
   if s and s.tree_win and vim.api.nvim_win_is_valid(s.tree_win) then
@@ -356,7 +328,7 @@ function M.toggle(revset)
     jj.notify("Not in a jj workspace", vim.log.levels.WARN)
     return
   end
-  local s = { revset = revset or DEFAULT_REVSET, marks = {}, rows = {} }
+  local s = { root = root, revset = revset or DEFAULT_REVSET, marks = {}, rows = {} }
   tabs[tab] = s
   require("jjreview.watch").start(root, M.on_change)
   require("neo-tree.sources.manager").close_all()
@@ -476,6 +448,27 @@ function M.setup()
         log.render(s)
         refresh_tree()
       end
+    end,
+  })
+
+  -- The panel follows its tab into another workspace, and closes when
+  -- the tab leaves jj.
+  vim.api.nvim_create_autocmd("DirChanged", {
+    group = group,
+    callback = function()
+      local s = state()
+      local root = jj.root()
+      if not s or root == s.root then
+        return
+      end
+      if not root then
+        close(vim.api.nvim_get_current_tabpage())
+        return
+      end
+      require("jjreview.watch").start(root, M.on_change)
+      s.root, s.marks, s.cursor = root, {}, nil
+      log.render(s)
+      refresh_tree()
     end,
   })
 
