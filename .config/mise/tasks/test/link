@@ -34,8 +34,8 @@ backup=$(find "$state/backup" -path '*/.config/fish/config.fish')
 setup/link "$tmp/readme-state" agents >/dev/null
 [ ! -e "$HOME/README.md" ] || fail "a module README was linked"
 
-# A rerun has nothing to do.
-[ -z "$(setup/link "$state" core)" ] || fail "rerun changed links"
+# A rerun has nothing to do, and says so.
+[ "$(setup/link "$state" core)" = "no link changes" ] || fail "rerun changed links"
 
 # A link the last run made whose source is gone leaves. A recorded path
 # that no longer points into the repo stays.
