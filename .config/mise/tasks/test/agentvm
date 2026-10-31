@@ -1,0 +1,261 @@
+#!/usr/bin/env bash
+#MISE description="Check that agentvm keeps its sandbox: proxy, shares, copy, review, and status"
+set -eu
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-agentvm.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+script=$PWD/modules/agentvm/.local/libexec/agentvm/agentvm
+
+fail() {
+  echo "$1" >&2
+  exit 1
+}
+
+# Stubs that log every argument list to $ARGV_LOG. The container stub
+# stands in for the VM: it records the proxy file in the shared session
+# directory, which the guest would read and delete, and the snapshot it
+# was asked to copy. socat creates the socket it would listen on. nono
+# keeps the proxy password in $tmp/pass and serves until killed. On
+# Linux, where CI runs, uname reports Darwin.
+mkdir -p "$tmp/bin" "$tmp/home"
+cat >"$tmp/bin/container" <<'EOF'
+#!/bin/sh
+echo "container $*" >>"$ARGV_LOG"
+[ "$1" = run ] || exit 0
+while [ $# -gt 0 ]; do
+  case $1 in
+  --mount)
+    MOUNTS="${MOUNTS:-}
+$2"
+    case $2 in
+    *,target=/opt/agentvm/session)
+      session=${2#type=bind,source=}
+      session=${session%%,target=*}
+      ;;
+    *,target=/opt/agentvm/git,readonly)
+      gitdir=${2#type=bind,source=}
+      gitdir=${gitdir%%,target=*}
+      ;;
+    esac
+    ;;
+  --env) case $2 in AGENTVM_SNAPSHOT=?*) echo "${2#*=}" >"$SNAPSHOT_LOG" ;; esac ;;
+  esac
+  shift
+done
+cp "$session/proxy" "$PROXY_LOG"
+rm "$session/proxy"
+# A hostile guest working on the repository at $NEST_ROOT leaves a link
+# where a repository nested in it would get its copy.
+if [ -n "${NEST_ROOT:-}" ]; then
+  echo "$MOUNTS" | while IFS= read -r mount; do
+    case $mount in *",target=$NEST_ROOT")
+      source=${mount#type=bind,source=}
+      ln -s "$HOME" "${source%%,target=*}/inner"
+      ;;
+    esac
+  done
+fi
+# A guest writes a status file, which the host passes on while the VM
+# runs, then removes it.
+if [ -n "${GUEST_STATUS:-}" ]; then
+  mkdir -p "$session/status"
+  printf '%b' "$GUEST_STATUS" >"$session/status/${GUEST_NAME:-state}"
+  [ -z "${GUEST_LINK:-}" ] || ln -sf "$GUEST_LINK" "$session/status/state"
+  sleep 2.5
+  rm -f "$session/status/${GUEST_NAME:-state}"
+  sleep 1.5
+fi
+# Writes a bundle to $1 with one commit that adds pwned on top of the last
+# snapshot, as the guest hands over its changes, and the base to $2.
+bundle() {
+  base=$(cat "$SNAPSHOT_LOG")
+  vm=$(mktemp -d)
+  git -C "$vm" init -q
+  git -C "$vm" fetch -q "$gitdir" "$base"
+  git -C "$vm" checkout -q "$base"
+  echo pwned >"$vm/pwned"
+  git -C "$vm" add pwned
+  git -C "$vm" commit -q -m vm
+  git -C "$vm" update-ref refs/agentvm/vm HEAD
+  git -C "$vm" bundle create -q "$1" refs/agentvm/vm "^$base"
+  echo "${BASE:-$base}" >"$2"
+}
+# A guest that changed the copy hands over its changes.
+[ -z "${CHANGE:-}" ] || bundle "$session/vm.bundle" "$session/base"
+# A hostile guest leaves links where the host writes and reads next.
+[ -z "${VICTIM:-}" ] || ln -s "$VICTIM" "$session/proxy"
+if [ -n "${PLANTED:-}" ]; then
+  bundle "$PLANTED" "$session/base"
+  ln -s "$PLANTED" "$session/vm.bundle"
+fi
+EOF
+cat >"$tmp/bin/socat" <<'EOF'
+#!/bin/sh
+echo "socat $*" >>"$ARGV_LOG"
+[ -z "${SOCAT_FAILS:-}" ] || exit 1
+socket=${1#UNIX-LISTEN:}
+: >"${socket%%,*}"
+exec sleep 60
+EOF
+cat >"$tmp/bin/nono" <<'EOF'
+#!/bin/sh
+echo "nono $*" >>"$ARGV_LOG"
+printf '%s' "$NONO_PROXY_PASS" >"$(dirname "$0")/../pass"
+echo "  nono proxy listening on 127.0.0.1:4242"
+exec sleep 60
+EOF
+cat >"$tmp/bin/tmux" <<'EOF'
+#!/bin/sh
+echo "tmux $*" >>"$ARGV_LOG"
+EOF
+cat >"$tmp/bin/on-status" <<'EOF'
+#!/bin/sh
+printf '[%s]\n' "$*" >>"$STATUS_LOG"
+EOF
+cat >"$tmp/bin/uname" <<'EOF'
+#!/bin/sh
+echo Darwin
+EOF
+chmod +x "$tmp/bin/"*
+printf '[user]\n\tname = Test\n\temail = test@example.com\n' >"$tmp/gitconfig"
+
+export HOME="$tmp/home" XDG_STATE_HOME="$tmp/state" XDG_DATA_HOME="$tmp/data" \
+  PATH="$tmp/bin:$PATH" DOTFILES_DIR="$PWD" ARGV_LOG="$tmp/argv.log" \
+  SNAPSHOT_LOG="$tmp/snapshot" PROXY_LOG="$tmp/proxy" STATUS_LOG="$tmp/status" \
+  GIT_CONFIG_GLOBAL="$tmp/gitconfig" GIT_CONFIG_NOSYSTEM=1
+mkdir -p "$XDG_STATE_HOME/agentvm"
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=test \
+  -keyout "$XDG_STATE_HOME/agentvm/ca.key" -out "$XDG_STATE_HOME/agentvm/ca.pem" 2>/dev/null
+
+# A launch snapshots the working tree of a repository without commits, at
+# a path with a space.
+repo="$tmp/my repo"
+git init -q "$repo"
+echo a >"$repo/a"
+(cd "$repo" && "$script" shell </dev/null >/dev/null 2>"$tmp/err") || fail "the launch failed: $(cat "$tmp/err"): $(cat "$ARGV_LOG")"
+[ "$(git -C "$repo" ls-tree --name-only "$(cat "$SNAPSHOT_LOG")")" = a ] || fail "the snapshot lacks the working tree"
+[ -z "$(git -C "$repo" status --porcelain --untracked-files=no)" ] || fail "the snapshot touched the host's index"
+! grep -q Terminated "$tmp/err" || fail "stopping the proxy printed a job message"
+
+# tmux learns nothing from OSC 7, so the launcher marks its pane while the
+# VM runs, which the window formats show.
+: >"$ARGV_LOG"
+(cd "$repo" && TMUX_PANE=%9 "$script" shell </dev/null >/dev/null 2>&1) || :
+grep -q "^tmux set -p -t %9 @agentvm 1" "$ARGV_LOG" || fail "the tmux pane was not marked"
+grep -q "^tmux set -pu -t %9 @agentvm" "$ARGV_LOG" || fail "the tmux mark stayed"
+
+# The VM gets no network device, and the password reaches it through the
+# session directory, never an argument list.
+grep -q -- "--network none" "$ARGV_LOG" || fail "the session VM got a network device"
+pass=$(cat "$tmp/pass")
+[ -n "$pass" ] || fail "the proxy got no password"
+[ "$(cat "$PROXY_LOG")" = "nono:$pass" ] || fail "the guest got no proxy password"
+! grep -q "$pass" "$ARGV_LOG" || fail "the password showed in an argument list: $(grep "$pass" "$ARGV_LOG")"
+grep -q -- "TCP:127.0.0.1:4242" "$ARGV_LOG" && grep -q -- "/proxy.sock:/opt/agentvm/proxy.sock" "$ARGV_LOG" ||
+  fail "the proxy socket was not relayed"
+grep -q "^nono proxy -p agentvm --proxy" "$ARGV_LOG" || fail "the proxy added GitHub without --github"
+for dir in "$XDG_STATE_HOME"/agentvm/session.*; do
+  [ ! -e "$dir" ] || fail "the session directory stayed"
+done
+
+# take fetches the VM's commits and applies their diff once you answer t.
+# The guest can write to the directory it shares with the host, so a link
+# it leaves there must not redirect the proxy file that the host writes
+# for the second VM, which resets the copy.
+victim="$tmp/victim"
+echo untouched >"$victim"
+(cd "$repo" && echo t | CHANGE=1 VICTIM="$victim" "$script" take >/dev/null 2>&1) || :
+[ "$(cat "$repo/pwned" 2>/dev/null)" = pwned ] || fail "take did not apply the VM's changes"
+[ "$(cat "$victim")" = untouched ] || fail "the host wrote through a link the guest left"
+git -C "$repo" rev-parse -q --verify refs/remotes/agentvm/vm >/dev/null || fail "the VM's commits are not agentvm/vm"
+rm "$repo/pwned"
+
+# A bundle the guest planted as a link, or one that builds on a commit the
+# repository lacks, never reaches the repository.
+(cd "$repo" && echo t | PLANTED="$tmp/planted.bundle" "$script" take >/dev/null 2>&1) || :
+[ ! -e "$repo/pwned" ] || fail "the host fetched a bundle through a link the guest left"
+(cd "$repo" && echo t | CHANGE=1 BASE=0123456789abcdef0123456789abcdef01234567 "$script" take >/dev/null 2>&1) || :
+[ ! -e "$repo/pwned" ] || fail "the host took changes on an unknown base"
+
+# A session VM sees only its repository's folders and the clipboard. The
+# host's agent state and the dotfiles, ignored files included, stay out,
+# and the caches belong to the repository, so one repository's VM can't
+# plant tools that another repository's session runs.
+: >"$ARGV_LOG"
+(cd "$repo" && "$script" shell </dev/null >/dev/null 2>&1) || :
+! grep -q -- "source=$XDG_STATE_HOME/agents[,/]" "$ARGV_LOG" || fail "a launch shared the host's agent state"
+! grep -q -- "source=$DOTFILES_DIR," "$ARGV_LOG" || fail "a launch shared the dotfiles"
+grep -q -- "source=$XDG_STATE_HOME/agentvm/copies/.*/home/.cache,target=" "$ARGV_LOG" || fail "the caches are not the repository's own"
+# The host writes pasted images into the clipboard folder, so the guest
+# may only read it, or it could plant a link the host's next write follows.
+grep -q -- "source=$HOME/.cache/agentvm-clipboard,target=$HOME/.cache/agentvm-clipboard,readonly " "$ARGV_LOG" ||
+  fail "the clipboard folder is shared writable"
+
+# A repository nested in another must not get its copy inside the outer
+# copy, where the outer repository's VM can swap the folder for a link.
+outer="$(cd "$tmp" && pwd -P)/outer"
+git init -q "$outer"
+git init -q "$outer/inner"
+(cd "$outer" && NEST_ROOT="$outer" "$script" shell </dev/null >/dev/null 2>&1) || :
+: >"$ARGV_LOG"
+(cd "$outer/inner" && "$script" shell </dev/null >/dev/null 2>&1) || :
+inner_copy=$(tr ' ' '\n' <"$ARGV_LOG" | sed -n "s|^type=bind,source=\(.*\),target=$outer/inner\$|\1|p")
+[ -n "$inner_copy" ] || fail "the nested repository got no copy"
+[ "$(cd "$inner_copy" && pwd -P)" != "$(cd "$HOME" && pwd -P)" ] || fail "a nested copy followed a link the guest left"
+
+# The launcher refuses its own state, where a VM pane's reported folder
+# could lead the host into a repository the guest wrote.
+mkdir -p "$XDG_STATE_HOME/agentvm/copies/planted"
+git init -q "$XDG_STATE_HOME/agentvm/copies/planted"
+! (cd "$XDG_STATE_HOME/agentvm/copies/planted" && "$script" pane "$PWD" </dev/null >/dev/null 2>&1) ||
+  fail "the launcher ran inside its own state"
+
+# take shows the changes and asks first. Without an answer it keeps them.
+(cd "$repo" && CHANGE=1 "$script" take </dev/null >/dev/null 2>&1) || :
+[ ! -e "$repo/pwned" ] || fail "take applied the changes without asking"
+# A machine adds its own hosts through an untracked local profile, which
+# the proxy stacks on top.
+mkdir -p "$HOME/.config/nono/profiles"
+echo '{}' >"$HOME/.config/nono/profiles/agentvm-local.json"
+: >"$ARGV_LOG"
+(cd "$repo" && "$script" shell </dev/null >/dev/null 2>&1) || :
+grep -q "^nono proxy -p agentvm --extends agentvm-local " "$ARGV_LOG" || fail "the local profile was left out"
+rm "$HOME/.config/nono/profiles/agentvm-local.json"
+
+# The guest's status files reach the --on-status command as NAME VALUE,
+# with VALUE in printable text, an empty VALUE when a file goes, and no
+# arguments when the VM stops. Links and other names don't reach it.
+status() {
+  : >"$STATUS_LOG"
+  (cd "$repo" && "$@" "$script" --on-status "$tmp/bin/on-status" shell </dev/null >/dev/null 2>&1) || :
+}
+status env GUEST_STATUS='busy\tBash'
+[ "$(cat "$STATUS_LOG")" = "$(printf '[state busy\tBash]\n[state ]\n[]')" ] ||
+  fail "the status did not pass: $(cat "$STATUS_LOG")"
+status env GUEST_STATUS='\033]52;c;cHduZWQ=\abusy'
+grep -q "$(printf '\033')" "$STATUS_LOG" && fail "an escape sequence reached the status command"
+printf 'secret\n' >"$tmp/secret"
+status env GUEST_STATUS='x' GUEST_LINK="$tmp/secret"
+! grep -q secret "$STATUS_LOG" || fail "the host read through a link the guest left"
+status env GUEST_STATUS='busy' GUEST_NAME='bad name'
+! grep -q 'bad name' "$STATUS_LOG" || fail "the status command got a name outside the allowed set"
+# A bridge that dies before it listens stops the launch instead of
+# leaving it waiting for the socket.
+(cd "$repo" && SOCAT_FAILS=1 "$script" shell </dev/null >/dev/null 2>&1) &
+launch=$!
+for _ in $(seq 50); do
+  kill -0 "$launch" 2>/dev/null || break
+  sleep 0.1
+done
+if kill -0 "$launch" 2>/dev/null; then
+  pkill -P "$launch" 2>/dev/null || :
+  kill "$launch"
+  fail "a dead bridge left the launch waiting"
+fi
+! wait "$launch" || fail "a dead bridge let the launch succeed"
+# The review shows the guest's patch through the diff pager only after
+# every control character in it turned into visible text, so none
+# reaches the terminal. Tabs, newlines, and UTF-8 text stay.
+visible=$(printf 'a\033[2Jb\r\302\233c\tok \303\274\n' |
+  bash -c '. "$1/host/review.sh"; visible' sh "$PWD/modules/agentvm/.local/libexec/agentvm")
+[ "$visible" = "$(printf 'a^[[2Jb^M<U+009B>c\tok \303\274')" ] || fail "the review passed control characters: $visible"
+echo "agentvm ok"

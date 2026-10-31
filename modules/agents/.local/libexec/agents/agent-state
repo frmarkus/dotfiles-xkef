@@ -11,9 +11,9 @@
 # Entries sit under $XDG_STATE_HOME/agents, keyed by the pane the agent
 # runs in: wezterm-<pane id>, or tmux-<host>-<pane id> in tmux. The key
 # gives the picker a join back to its multiplexer, and an entry whose pane
-# is gone has nothing to join to. The host keeps tmux panes apart in the
-# directory the Lima VM shares with the host, since every tmux server
-# numbers its panes from 0. Outside both, the write commands do nothing.
+# is gone has nothing to join to. The host keeps tmux panes of different
+# servers apart, since every tmux server numbers its panes from 0.
+# Outside both, the write commands do nothing.
 #
 # <pane> holds one tab-separated record: agent, state, tool, epoch, and cwd.
 # The cwd goes last so a path never shifts another field. <pane>.task holds

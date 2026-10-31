@@ -1,6 +1,6 @@
 -- Leader bindings and palette entries for the agents package. leader.lua
--- adds them when the package is deployed. The Lima VM ones need lima.lua,
--- which vm.lua loads only on macOS.
+-- adds them when the package is deployed. The agent VM ones need agentvm.lua,
+-- which vm.lua loads where the agentvm package is deployed.
 local wezterm = require("wezterm")
 local act = wezterm.action
 local vm = require("vm")
@@ -20,13 +20,13 @@ M.palette = {
 }
 
 if vm.shell_tab then
-  local LIMA_AGENT = act.SpawnCommandInNewTab({ args = { "agents", "vm" } })
-  -- @key wezterm :: v :: Repository copy in the Lima VM, new tab
+  local VM_AGENT = act.SpawnCommandInNewTab({ args = { "agents", "vm", "claude" } })
+  -- @key wezterm :: v :: Repository copy in the agent VM, new tab
   table.insert(M.keys, { key = "v", mods = "LEADER", action = vm.shell_tab })
-  -- @key wezterm :: A :: Claude Code in the Lima VM, new tab
-  table.insert(M.keys, { key = "A", mods = "LEADER", action = LIMA_AGENT })
-  table.insert(M.palette, { brief = "Lima VM shell on a repository copy", icon = "cod_vm", action = vm.shell_tab })
-  table.insert(M.palette, { brief = "Claude Code in the Lima VM", icon = "cod_hubot", action = LIMA_AGENT })
+  -- @key wezterm :: A :: Claude Code in the agent VM, new tab
+  table.insert(M.keys, { key = "A", mods = "LEADER", action = VM_AGENT })
+  table.insert(M.palette, { brief = "Agent VM shell on a repository copy", icon = "cod_vm", action = vm.shell_tab })
+  table.insert(M.palette, { brief = "Claude Code in the agent VM", icon = "cod_hubot", action = VM_AGENT })
 end
 
 return M

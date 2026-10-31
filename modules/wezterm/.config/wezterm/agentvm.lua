@@ -1,5 +1,5 @@
--- Keeps new panes in the Lima VM from ~/.config/lima/dev.yaml. A pane runs
--- in the VM when its shell reports the lima-dev host through OSC 7. Splits
+-- Keeps new panes in the agent VM that `agents vm` boots. A pane runs in
+-- the VM when its shell reports an agentvm host through OSC 7. Splits
 -- and new tabs of that pane run `agents vm pane` in the same directory,
 -- which exists in the guest because `agents vm` copies repositories to
 -- their host paths.
@@ -9,15 +9,14 @@ local act = wezterm.action
 
 local M = {}
 
--- The VM's name, which `agents vm` passes to limactl too.
-local VM = "dev"
-
-M.HOST = "lima-" .. VM
+-- The prefix of the host names that `agents vm` reports. Each VM takes
+-- its container's name, such as agentvm-4242-17.
+M.HOST = "agentvm"
 -- The shield that marks sandbox panes in tab titles and the status line.
 M.MARK = ""
 
 -- The directory for pasted images, which the VM mounts at the same path.
-local CLIPBOARD_DIR = wezterm.home_dir .. "/.cache/lima-clipboard"
+local CLIPBOARD_DIR = wezterm.home_dir .. "/.cache/agentvm-clipboard"
 
 -- Writes the clipboard's PNG to the path in argv, and fails when the
 -- clipboard holds no image.
@@ -34,7 +33,7 @@ M.shell_tab = act.SpawnCommandInNewTab({ args = { "agents", "vm", "shell" } })
 
 -- The directory in cwd, a URL from OSC 7, when it names the VM, else nil.
 local function vm_path(cwd)
-  if cwd and cwd.host == M.HOST then
+  if cwd and cwd.host and cwd.host:sub(1, #M.HOST) == M.HOST then
     return cwd.file_path
   end
 end
@@ -61,12 +60,14 @@ function M.info_in_vm(info)
 end
 
 -- Splits toward direction, "Right" or "Down", in the VM for a VM pane
--- and with action for any other pane.
+-- and with action for any other pane. The VM reports the directory, so
+-- it goes to `agents vm pane`, which checks it, and never becomes the
+-- host's working directory.
 function M.split(action, direction)
   return wezterm.action_callback(function(window, pane)
     local dir = vm_dir(pane)
     local split = dir
-        and act.SplitPane({ direction = direction, command = { args = { "agents", "vm", "pane", dir }, cwd = dir } })
+        and act.SplitPane({ direction = direction, command = { args = { "agents", "vm", "pane", dir } } })
       or action
     window:perform_action(split, pane)
   end)
@@ -76,7 +77,7 @@ end
 function M.tab(action)
   return wezterm.action_callback(function(window, pane)
     local dir = vm_dir(pane)
-    local spawn = dir and act.SpawnCommandInNewTab({ args = { "agents", "vm", "pane", dir }, cwd = dir }) or action
+    local spawn = dir and act.SpawnCommandInNewTab({ args = { "agents", "vm", "pane", dir } }) or action
     window:perform_action(spawn, pane)
   end)
 end

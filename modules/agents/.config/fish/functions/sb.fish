@@ -12,9 +12,13 @@ function sb -d "Run a command inside a nono sandbox"
     set -l rest $argv[2..-1]
     set -l libexec ~/.local/libexec/agents
 
+    # The agent VM's image holds the skills, and an install there would
+    # land on a disk that the VM throws away.
     switch $cmd
         case claude pi
-            test -x $libexec/agent-skills; and $libexec/agent-skills ensure $cmd
+            if test -x $libexec/agent-skills; and not __sb_in_vm
+                $libexec/agent-skills ensure $cmd
+            end
     end
 
     set -l cmd_args
@@ -29,7 +33,7 @@ function sb -d "Run a command inside a nono sandbox"
             set -a cmd_args --settings (jq -c '.sandbox.enabled = false' $HOME/.claude/settings.dotfiles.json)
     end
 
-    # The Lima VM is the sandbox there, so the agent runs without nono, and
+    # The agent VM is the sandbox there, so the agent runs without nono, and
     # Claude Code without permission prompts.
     if __sb_in_vm
         test $cmd = claude; and set -p cmd_args --dangerously-skip-permissions
@@ -87,8 +91,8 @@ function sb -d "Run a command inside a nono sandbox"
     return $rc
 end
 
-# Lima mounts its cloud-init data here in every guest, as agent-trace
+# agentvm marks every agent VM image with this file, as agent-trace
 # checks too.
 function __sb_in_vm
-    test -e /mnt/lima-cidata
+    test -e /etc/agentvm
 end

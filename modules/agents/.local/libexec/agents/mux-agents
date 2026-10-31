@@ -47,10 +47,9 @@ fi
 readonly ICON_WAITING='•'
 readonly ICON_BUSY='◦'
 readonly ICON_IDLE='·'
-# The shield marks an agent in the Lima VM, as tab titles and the status
-# line do. Its pane reports the VM host, lima-<vm>, through OSC 7.
+# The shield marks an agent in the agent VM, as tab titles and the status
+# line do.
 readonly SANDBOX_MARK=''
-readonly SANDBOX_CWD='file://lima-'
 
 # Sort ranks: needs input first, working next, idle last.
 readonly RANK_WAITING=0
@@ -94,12 +93,16 @@ join_panes() {
   ' <("$LIBEXEC/agent-state" list "$MUX") <(live_panes)
 }
 
-# Emits the id of every WezTerm pane that runs in the Lima VM. Inside
-# tmux the picker runs where the agents do, so none are marked.
+# Emits the id of every pane that runs in the agent VM. In WezTerm the
+# pane reports an agentvm host through OSC 7, and in tmux `agents vm`
+# sets the @agentvm pane option.
 sandbox_panes() {
-  [ "$MUX" = wezterm ] || return 0
-  wezterm cli list --format json |
-    jq -r --arg cwd "$SANDBOX_CWD" '.[] | select(.cwd | startswith($cwd)) | .pane_id'
+  if [ "$MUX" = tmux ]; then
+    tmux list-panes -a -F '#{pane_id} #{@agentvm}' | awk '$2 == 1 { print $1 }'
+  else
+    wezterm cli list --format json |
+      jq -r '.[] | select(.cwd | startswith("file://agentvm")) | .pane_id'
+  fi
 }
 
 # Emits "pane target" for every live pane. A target reads "workspace:tab"

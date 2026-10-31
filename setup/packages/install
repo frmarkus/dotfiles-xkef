@@ -134,7 +134,7 @@ install_arch() {
   fi
 
   local paru_flags=(--needed --noconfirm)
-  [[ -e /mnt/lima-cidata ]] && paru_flags+=(--mflags="-A")
+  [[ -e /etc/agentvm ]] && paru_flags+=(--mflags="-A")
   # One broken AUR package must not abort the whole apply. Retry one by
   # one and skip the failures with a warning.
   if ! paru -S "${paru_flags[@]}" "${packages[@]}"; then

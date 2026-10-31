@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# The files in host/ read variables this script sets, such as $on_status.
+# shellcheck disable=SC2034
+# Runs a command in a microVM on a copy of the current repository. The VM
+# is the sandbox: it has no network device, and its only way out is a
+# socket to this session's credential proxy, which reaches only the hosts
+# that the agentvm nono profile allows.
+#
+#   agentvm [options] run -- CMD [ARGS...]   CMD in the VM's login shell
+#   agentvm [options] shell                  a login shell
+#   agentvm [options] pane DIR               a login shell in DIR, on the
+#                                            copy as it stands
+#   agentvm take                             apply the copy's changes here
+#   agentvm drop                             discard the copy's changes
+#   agentvm build                            build the image
+#
+#   --extends PROFILE   stack a nono profile on the proxy (repeatable)
+#   --env KEY=VALUE     set a variable in the VM (repeatable)
+#   --persist PATH      keep this path under the guest's home between
+#                       sessions, per repository (repeatable)
+#   --on-status CMD     run CMD NAME VALUE when the guest changes a status
+#                       file, and CMD alone when the VM stops
+#
+# `agents vm` runs it. The rest sits beside it, by where it runs:
+#
+#  host/    the parts this script sources: common.sh, build.sh, and the
+#           four steps of a session
+#             proxy.sh    start the credential proxy and its socket
+#             vm.sh       boot a fresh VM with the repository's shares
+#             status.sh   pass the guest's status to --on-status
+#             review.sh   show the copy's changes, and take, drop, or
+#                         keep them
+#  guest/   session.sh, which runs in the VM around the command
+#  image/   the Containerfile and prepare.sh, which `agentvm build` runs
+#
+# The guest fetches the host's working tree as a commit into a copy that
+# lives on the host, in the repository's folder under $STATE/copies, and
+# replaces the copy only while it holds no changes of its own. The copy's
+# changes come back as commits in a git bundle, whose diff applies only
+# after you review it, and host git never runs inside the copy, so
+# nothing the VM writes runs on the host before then.
+set -euo pipefail
+
+readonly LIBEXEC="${0%/*}"
+# shellcheck source=host/common.sh
+. "$LIBEXEC/host/common.sh"
+# shellcheck source=host/build.sh
+. "$LIBEXEC/host/build.sh"
+# shellcheck source=host/proxy.sh
+. "$LIBEXEC/host/proxy.sh"
+# shellcheck source=host/vm.sh
+. "$LIBEXEC/host/vm.sh"
+# shellcheck source=host/status.sh
+. "$LIBEXEC/host/status.sh"
+# shellcheck source=host/review.sh
+. "$LIBEXEC/host/review.sh"
+
+# Prints the usage block at the top of this file.
+usage() {
+  sed -n '/^#   agentvm/,/^#  *file, and CMD alone/s/^#   //p' "$0" >&2
+  exit 2
+}
+
+[ "$(uname -s)" = Darwin ] || die "the VM runs on macOS"
+
+extends=()
+env=()
+persist=()
+on_status=
+while [ $# -gt 0 ]; do
+  case $1 in
+  --extends) extends+=("${2:?}") ;;
+  --env) env+=("${2:?}") ;;
+  --persist) persist+=("${2:?}") ;;
+  --on-status) on_status=${2:?} ;;
+  -h | --help) usage ;;
+  *) break ;;
+  esac
+  shift 2
+done
+mode=${1:-}
+[ $# -eq 0 ] || shift
+case "$mode" in
+run)
+  [ "${1:-}" != -- ] || shift
+  [ $# -gt 0 ] || usage
+  ;;
+shell | take | drop) ;;
+pane) [ $# -eq 1 ] || usage ;;
+build)
+  build
+  exit
+  ;;
+*) usage ;;
+esac
+
+container image inspect "$IMAGE" >/dev/null 2>&1 || die "no image yet, which agents vm build builds"
+
+# Git in a repository the guest wrote, such as a copy, can run that
+# guest's hooks and config on the host. A split of a VM pane passes the
+# folder the guest reported, so the check covers it. A guest folder
+# without a host counterpart opens the pane outside a repository.
+if [ "$mode" = pane ]; then
+  cd "$1" 2>/dev/null || cd
+fi
+mkdir -p "$STATE"
+case "$(pwd -P)/" in
+"$(cd "$STATE" && pwd -P)"/*) die "refusing to run inside $STATE" ;;
+esac
+
+root=
+workdir=$HOME
+if git rev-parse --show-toplevel >/dev/null 2>&1; then
+  root=$(git rev-parse --show-toplevel)
+  workdir="$root/$(git rev-parse --show-prefix)"
+elif [ "$mode" != shell ] && [ "$mode" != pane ]; then
+  die "$PWD is not in a git repository"
+fi
+[ "$mode" != pane ] || workdir=$1
+
+session=$(umask 077 && mktemp -d "$STATE/session.XXXXXX")
+proxy_pid=
+cleanup() {
+  [ -z "$proxy_pid" ] || kill "$proxy_pid" 2>/dev/null || :
+  stop_status
+  [ -z "${TMUX_PANE:-}" ] || tmux set -pu -t "$TMUX_PANE" @agentvm 2>/dev/null || :
+  rm -rf "$session"
+}
+trap cleanup EXIT
+
+# The repository's folder, which the VM mounts parts of. Each sits
+# directly in copies/, which only the host writes. Named after the
+# repository's path, a nested repository's folder would sit in the outer
+# copy, where the outer repository's VM could swap it for a link to any
+# host directory. A shell outside a repository gets a folder of its own.
+if [ -n "$root" ]; then
+  folder="$STATE/copies/${root##*/}-$(printf '%s' "$root" | shasum -a 256 | cut -c1-16)"
+else
+  folder="$STATE/shell"
+fi
+# WezTerm writes images pasted into a VM pane here, which the VM reads.
+clipboard="$HOME/.cache/agentvm-clipboard"
+mkdir -p "$folder/copy" "$clipboard"
+
+ensure_ca
+start_proxy
+
+case "$mode" in
+take | drop)
+  [ -n "$root" ] || die "$mode needs a repository"
+  if [ "$mode" = take ]; then
+    guest bundle </dev/null
+    review
+  else
+    drop
+  fi
+  exit
+  ;;
+pane) mode_args=(pane "$workdir") ;;
+*)
+  [ -z "$root" ] || snap=$(snapshot)
+  mode_args=("$mode" "$@")
+  ;;
+esac
+
+# OSC 7 with the VM's host name tells WezTerm the pane works in the VM,
+# which the status line marks and splits follow.
+if [ -t 1 ]; then
+  printf '\e]7;file://%s%s\e\\' "$HOST" "$workdir"
+fi
+# tmux takes no host from OSC 7, so the pane carries an option instead,
+# which the window formats in theme.conf mark.
+if [ -n "${TMUX_PANE:-}" ]; then
+  tmux set -p -t "$TMUX_PANE" @agentvm 1
+fi
+
+rc=0
+guest "${mode_args[@]}" || rc=$?
+if [ -n "$root" ] && [ "$mode" != pane ] && [ -s "$session/vm.bundle" ]; then
+  review
+fi
+exit "$rc"

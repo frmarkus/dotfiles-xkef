@@ -1,11 +1,11 @@
 # Session ids of the current repository, from the transcript file names on
-# this machine and in every Lima VM. `agent-trace list` reads every
+# this machine and in the agent VM. `agent-trace list` reads every
 # transcript, which takes seconds.
 function __agent_trace_sessions
     set -l root (git rev-parse --show-toplevel 2>/dev/null); or return
     set -l prefix (string replace -ra '[^[:alnum:]]' - -- $root)
     set -l state (set -q XDG_STATE_HOME; and echo $XDG_STATE_HOME; or echo ~/.local/state)
-    set -l transcripts ~/.claude/projects/$prefix*/*.jsonl $state/agents/lima-*/claude-projects/$prefix*/*.jsonl
+    set -l transcripts ~/.claude/projects/$prefix*/*.jsonl $state/agentvm/{copies/*,shell}/home/.claude/projects/$prefix*/*.jsonl
     path basename -E -- $transcripts
 end
 

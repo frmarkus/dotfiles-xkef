@@ -105,7 +105,7 @@ local function update(window, pane)
   end
   table.insert(right, { Foreground = { AnsiColor = "Grey" } })
   table.insert(right, { Text = wezterm.strftime("%H:%M") .. "  " })
-  -- The host the active pane runs on, marked while it's the Lima VM.
+  -- The host the active pane runs on, marked while it's the agent VM.
   local host, color = wezterm.hostname(), "Teal"
   if vm.in_vm(pane) then
     host, color = vm.MARK .. " " .. vm.HOST, "Maroon"
@@ -118,7 +118,7 @@ end
 
 -- A tab reads " index:name ", named by program(): a gap of spaces, then
 -- the active tab reversed on blue and the others grey, or olive after
--- unseen output. A tab whose active pane runs in the Lima VM adds the
+-- unseen output. A tab whose active pane runs in the agent VM adds the
 -- shield and takes maroon for blue.
 local function tab_title(tab, background)
   local pane = tab.active_pane

@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# `agents vm`: Claude Code or a shell in the agent VM. agentvm, from the
+# agentvm module, holds the sandbox. This script adds Claude's
+# credentials, its transcripts, and the picker, and prints the help.
+set -euo pipefail
+
+# Any value works, since the proxy replaces it.
+readonly PLACEHOLDER=nono-proxy
+readonly AGENTVM="$HOME/.local/libexec/agentvm/agentvm"
+
+usage() {
+  cat <<EOF
+Usage: agents vm <command> [args...]
+
+Runs Claude Code or a shell in the agent VM: a microVM on a copy of this
+repository, with no network device. Its only way out is a proxy that adds
+your tokens and reaches only allowed hosts.
+
+Commands:
+  claude [--github] [args...]  Claude Code, permission prompts off
+  shell [--github]             fish in the VM
+  take                         show the VM copy's changes, then apply or keep
+  drop                         discard the VM copy's changes
+  build                        rebuild the VM image, after dotfiles changes
+  help                         show this help
+
+  --github  give the session GitHub through the proxy
+
+The VM works on a copy of the repository. When a session ends, its changes
+come back as commits, agentvm/vm in git and vm@agentvm in jj, and you take,
+drop, or keep them. Kept changes stay in the copy for the next session.
+
+More: ${DOTFILES_DIR:-~/dotfiles}/modules/agentvm/README.md
+EOF
+}
+
+command=${1:-help}
+[ $# -eq 0 ] || shift
+case "$command" in
+help | -h | --help)
+  usage
+  exit
+  ;;
+claude | shell | pane | take | drop | build) ;;
+*)
+  usage >&2
+  exit 2
+  ;;
+esac
+
+if [ ! -x "$AGENTVM" ]; then
+  echo "agents vm: agentvm not found, which the agentvm module installs" >&2
+  exit 1
+fi
+
+args=(
+  --extends agentvm-claude --env "CLAUDE_CODE_OAUTH_TOKEN=$PLACEHOLDER"
+  --persist .claude/projects --on-status "${0%/*}/vm-status"
+)
+if [ "${1:-}" = --github ]; then
+  args+=(--extends agents --env "GH_TOKEN=$PLACEHOLDER")
+  shift
+fi
+
+case "$command" in
+claude) exec "$AGENTVM" "${args[@]}" run -- claude "$@" ;;
+build) exec "$AGENTVM" build ;;
+# WezTerm runs pane for a split of a VM pane.
+pane) exec "$AGENTVM" "${args[@]}" pane "${1:?}" ;;
+*) exec "$AGENTVM" "${args[@]}" "$command" ;;
+esac

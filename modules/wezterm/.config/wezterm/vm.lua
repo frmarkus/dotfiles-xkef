@@ -1,11 +1,14 @@
--- Panes in the Lima VM, through lima.lua, on a Mac with the agents
--- package. Elsewhere every pane is local, and each wrapper returns its
--- action unchanged.
+-- Panes in the agent VM, through agentvm.lua, on a Mac with the agentvm
+-- package, whose engine sits in ~/.local/libexec. Elsewhere every pane is
+-- local, and each wrapper returns its action unchanged.
 local wezterm = require("wezterm")
-local path = require("path")
 
-if wezterm.target_triple:find("darwin") and path.deployed("agents") then
-  return require("lima")
+local engine = io.open(wezterm.home_dir .. "/.local/libexec/agentvm/agentvm")
+if engine then
+  engine:close()
+end
+if wezterm.target_triple:find("darwin") and engine then
+  return require("agentvm")
 end
 
 local M = {}

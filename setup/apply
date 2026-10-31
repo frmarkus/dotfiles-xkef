@@ -26,12 +26,14 @@ set -l pipeline \
     zoxide "add every repo to zoxide"
 
 # $state/modules selects the modules, one per line. The first run
-# writes core, desktop, and agents, or core and agents in the Lima VM,
-# which /mnt/lima-cidata marks. The extras go in by hand.
+# writes core, desktop, and agents, plus agentvm on macOS, or core and
+# agents in the agent VM, which /etc/agentvm marks. The extras go in by
+# hand.
 #
 #   core       shell, Neovim, tmux, version control, and CLI tools
 #   desktop    GUI apps, the 1Password SSH agent, and Ghostty
-#   agents     Claude Code, pi, their nono sandbox, and the Lima VM
+#   agents     Claude Code, pi, and their nono sandbox
+#   agentvm    a sandbox VM for agents, on macOS
 #   wezterm    WezTerm, an alternative to Ghostty and tmux
 #   helix      Helix with its formatters and language servers
 #   zed        Zed
@@ -39,15 +41,16 @@ set -l pipeline \
 mkdir -p $state
 if not test -f $state/modules
     set -l default core desktop agents
-    test -e /mnt/lima-cidata; and set default core agents
+    test (uname -s) = Darwin; and set -a default agentvm
+    test -e /etc/agentvm; and set default core agents
     printf '%s\n' $default >$state/modules
 end
 set -g modules (string trim <$state/modules |
     string match -rv '^(#.*)?$')
 
 # The repo links the state as state/, which git ignores, so the
-# selection and the links sit next to the modules. The Lima VM mounts
-# the repo read-only and sees the host's link.
+# selection and the links sit next to the modules. The agent VM's image
+# holds a read-only copy of the repo, which gets no link.
 if test -w $repo; and not test -L $repo/state
     ln -s $state $repo/state
 end
@@ -56,8 +59,11 @@ function selected -a module
     contains -- $module $modules
 end
 
+# The agent VM installs the slim sandbox list in place of the modules'.
 function step_packages
-    env DOTFILES_PACKAGES="$modules" $repo/setup/packages/install
+    set -l packages $modules
+    test -e /etc/agentvm; and set packages sandbox
+    env DOTFILES_PACKAGES="$packages" $repo/setup/packages/install
 end
 
 function step_links
@@ -128,7 +134,7 @@ function step_system
 
     # A fresh clone is plain git. jj takes it over and tracks main as
     # `dots update` does. A checkout without main@origin, as in CI,
-    # skips the tracking. The Lima VM's read-only checkout stays.
+    # skips the tracking. The agent VM's read-only checkout stays.
     if not test -d $repo/.jj; and test -w $repo; and command -q jj
         jj git init --colocate $repo; or return
         jj -R $repo bookmark track main@origin 2>/dev/null

@@ -31,8 +31,8 @@ finding.
 
 ## Hard-coded values
 
-The code runs on more than one Mac, on Arch, in the Lima VM, and under more than
-one GitHub account. Flag a literal that pins it to one of them, such as the
+The code runs on more than one Mac, on Arch, in the agent VM, and under more
+than one GitHub account. Flag a literal that pins it to one of them, such as the
 username `xkef`, a path under `/Users/kk`, a host name, or an email address.
 Paths come from `$HOME` or the `XDG_*` variables, and the account comes from the
 active `gh` login. Flag a version pin or a literal that the diff copies into a
@@ -40,11 +40,15 @@ second file, since the copies drift apart.
 
 ## Sandbox security
 
-Agents run under nono through `sb`, and in the Lima VM through `agents vm`. Flag
-any change that lets a secret or a write reach an agent:
+Agents run under nono through `sb`, and in the agent VM through `agents vm`.
+Flag any change that lets a secret or a write reach an agent:
 
 - A profile in `modules/agents/.config/nono/profiles/` that grants a new path,
   widens read to write, or lets the agent write a file the host later runs.
+- A change in `modules/agentvm/` that widens what the VM reaches: a host in
+  `.config/nono/profiles/agentvm.json`, a share in
+  `.local/libexec/agentvm/host/vm.sh`, or a host-side read or write of a path
+  the guest can write.
 - A token that reaches the sandbox through an exported variable such as
   `MISE_GITHUB_TOKEN`, a file stored in plain text, or a command line. The
   profile's `deny_vars` must strip every secret-looking variable, and tokens

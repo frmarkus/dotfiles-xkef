@@ -1,88 +1,61 @@
 #!/usr/bin/env bash
-#MISE description="Check how agents vm starts its proxy and copies the repository into the VM"
+#MISE description="Check how agents vm runs Claude Code through agentvm and feeds the picker"
 set -eu
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-agents-vm.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
-script=$PWD/modules/agents/.local/libexec/agents/lima-agent
+libexec=$PWD/modules/agents/.local/libexec/agents
 
 fail() {
   echo "$1" >&2
   exit 1
 }
 
-# Stubs that log every argument list to $ARGV_LOG. Like Lima, limactl
-# quotes the guest command for sh and hands it to fish, the guest's login
-# shell, which reads `\\` in single quotes as `\`. nono keeps the proxy
-# password in $tmp/pass and serves until killed. sudo only logs. jq passes
-# through to the real one. ssh runs its remote command locally. fish, the
-# session, exits at once.
-mkdir -p "$tmp/bin" "$tmp/home"
-# mise shims would read the repo's mise config under the test's HOME, so
-# PATH leaves them out.
-PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -v /mise/shims | paste -sd: -)
-real_jq=$(command -v jq)
-cat >"$tmp/bin/limactl" <<'EOF'
+# A stub agentvm, where the agentvm module installs it, records its
+# arguments one per line.
+export HOME="$tmp/home" ARGV_LOG="$tmp/argv.log" XDG_STATE_HOME="$tmp/state"
+mkdir -p "$HOME/.local/libexec/agentvm"
+cat >"$HOME/.local/libexec/agentvm/agentvm" <<'EOF'
 #!/bin/sh
-echo "limactl $*" >>"$ARGV_LOG"
-case " $* " in *" -- "*) ;; *) exit 0 ;; esac
-while [ "$1" != -- ]; do shift; done
-shift
-cmd=exec
-for arg; do
-  cmd="$cmd '$(printf '%s' "$arg" | sed "s/'/'\"'\"'/g")'"
+printf '%s\n' "$@" >"$ARGV_LOG"
+EOF
+chmod +x "$HOME/.local/libexec/agentvm/agentvm"
+
+# Without a command, and with help, it prints the help and starts nothing.
+for args in "" help -h --help; do
+  # shellcheck disable=SC2086
+  out=$("$libexec/vm-agent" $args)
+  [[ "$out" == *"Usage: agents vm"* ]] || fail "agents vm $args printed no help"
+  [ ! -e "$ARGV_LOG" ] || fail "agents vm $args started agentvm"
 done
-exec fish --no-config -c "$cmd"
-EOF
-cat >"$tmp/bin/nono" <<'EOF'
-#!/bin/sh
-echo "nono $*" >>"$ARGV_LOG"
-printf '%s' "$NONO_PROXY_PASS" >"$(dirname "$0")/../pass"
-echo "  nono proxy listening on 127.0.0.1:4242"
-exec sleep 60
-EOF
-cat >"$tmp/bin/sudo" <<'EOF'
-#!/bin/sh
-echo "sudo $*" >>"$ARGV_LOG"
-EOF
-cat >"$tmp/bin/jq" <<EOF
-#!/bin/sh
-echo "jq \$*" >>"\$ARGV_LOG"
-exec "$real_jq" "\$@"
-EOF
-cat >"$tmp/bin/ssh" <<'EOF'
-#!/bin/sh
-for last; do :; done
-exec sh -c "$last"
-EOF
-cat >"$tmp/bin/fish" <<EOF
-#!/bin/sh
-case "\$1" in -l) exit 0 ;; esac
-exec "$(command -v fish)" "\$@"
-EOF
-chmod +x "$tmp/bin/"*
-printf '[user]\n\tname = Test\n\temail = test@example.com\n' >"$tmp/gitconfig"
 
-export HOME="$tmp/home" XDG_STATE_HOME="$tmp/state" PATH="$tmp/bin:$PATH" \
-  ARGV_LOG="$tmp/argv.log" \
-  GIT_CONFIG_GLOBAL="$tmp/gitconfig" GIT_CONFIG_NOSYSTEM=1
-# A launch copies the working tree of a repository without commits, at a
-# path with a space, to the guest ref. Host and guest share the repository
-# here, so the stale ref from a previous copy sits in the same place.
-repo="$tmp/my repo"
-git init -q "$repo"
-stale=$(git -C "$repo" commit-tree -m stale "$(git -C "$repo" mktree </dev/null)")
-git -C "$repo" update-ref refs/lima/host "$stale"
-git -C "$repo" update-ref refs/lima/base "$stale"
-echo a >"$repo/a"
-(cd "$repo" && echo k | "$script" shell >/dev/null 2>&1) || fail "the launch failed"
-[ "$(git -C "$repo" ls-tree --name-only refs/lima/host 2>/dev/null)" = a ] || fail "the guest ref lacks the working tree"
+# Claude Code runs with its credentials profile, a placeholder token, its
+# transcripts kept per repository, and the picker's status command.
+"$libexec/vm-agent" claude --resume
+expected=$(printf '%s\n' --extends agentvm-claude --env CLAUDE_CODE_OAUTH_TOKEN=nono-proxy \
+  --persist .claude/projects --on-status "$libexec/vm-status" run -- claude --resume)
+[ "$(cat "$ARGV_LOG")" = "$expected" ] || fail "agents vm claude passed: $(cat "$ARGV_LOG")"
 
-# The launch trusts the CA in the guest, removes the password file, and
-# passes the password through no argument list.
-grep -q "^sudo update-ca-trust" "$ARGV_LOG" || fail "the guest did not trust the CA"
-[ ! -e "$HOME/.local/state/lima-agent/proxy-4242" ] || fail "the password file stayed"
-pass=$(cat "$tmp/pass")
-[ -n "$pass" ] || fail "the proxy got no password"
-! grep -q "$pass" "$ARGV_LOG" || fail "the password showed in an argument list: $(grep "$pass" "$ARGV_LOG")"
-grep -q "^nono proxy -p lima --proxy" "$ARGV_LOG" || fail "the proxy added GitHub without --github"
+# --github stacks the GitHub routes and a placeholder for gh.
+"$libexec/vm-agent" shell --github
+grep -qx agents "$ARGV_LOG" && grep -qx GH_TOKEN=nono-proxy "$ARGV_LOG" && grep -qx shell "$ARGV_LOG" ||
+  fail "--github passed: $(cat "$ARGV_LOG")"
+"$libexec/vm-agent" build
+[ "$(cat "$ARGV_LOG")" = build ] || fail "build passed: $(cat "$ARGV_LOG")"
+! "$libexec/vm-agent" bogus >/dev/null 2>&1 || fail "an unknown command succeeded"
+
+# vm-status writes the picker entry for this pane from the guest's
+# record, and clears it for an unknown state and when the VM stops.
+entry="$XDG_STATE_HOME/agents/wezterm-7"
+status() {
+  env -u TMUX_PANE WEZTERM_PANE=7 "$libexec/vm-status" "$@"
+}
+status wezterm-0 "$(printf 'claude\tbusy\tBash\t1\t/work')"
+[ "$(cut -f1-3 "$entry")" = "$(printf 'claude\tbusy\tBash')" ] || fail "the picker missed the VM's agent"
+status wezterm-0.task "fix the tests"
+[ "$(cat "$entry.task")" = "fix the tests" ] || fail "the picker missed the task"
+status wezterm-0 "$(printf 'claude\tpwned\tBash\t1\t/work')"
+[ ! -e "$entry" ] || fail "the picker took an unknown state"
+status wezterm-0 "$(printf 'claude\tidle\t-\t1\t/work')"
+status
+[ ! -e "$entry" ] || fail "the picker entry stayed after the VM stopped"
 echo "agents-vm ok"

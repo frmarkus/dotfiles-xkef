@@ -37,7 +37,7 @@ The machine's state lives in `~/.local/state/dotfiles`, which the repo links as
 `state/`:
 
 - `modules` selects the modules under `modules/`. A machine gets `core`,
-  `desktop`, and `agents`, and the Lima VM gets `core` and `agents`. The extras
+  `desktop`, and `agents`, and the agent VM gets `core` and `agents`. The extras
   `wezterm`, `helix`, `zed`, and `kickstart` go in by hand.
 - `links` lists every link the last run made, so a file removed from the repo
   loses its link.
@@ -57,7 +57,7 @@ The machine's state lives in `~/.local/state/dotfiles`, which the repo links as
 | [atuin](https://atuin.sh)                                                          | Searchable local shell history                             |
 | [Claude Code](https://claude.com/claude-code), [pi](https://pi.dev)                | AI coding agents, always launched in a nono sandbox        |
 | [Jujutsu](https://github.com/jj-vcs/jj)                                            | Git-compatible version control, `jj`, with a simpler model |
-| [Lima](https://lima-vm.io)                                                         | Linux development VM with the host's dotfiles setup        |
+| [Containerization](https://github.com/apple/containerization)                      | Sandbox VM for agents, with no network device             |
 | [Vale](https://vale.sh)                                                            | Prose linter for markdown, Google style plus AI-tell rules |
 | eza, bat, fd, ripgrep, zoxide, yazi, mise                                          | Command-line replacements and workflow tools               |
 
@@ -71,8 +71,8 @@ once.
 
 `claude` and `pi` start in a [nono](https://nono.sh) sandbox, whose credential
 proxy adds the Claude and GitHub tokens to requests. `agents vm` runs Claude
-Code in a [Lima](https://lima-vm.io) VM behind the same proxy. Store the tokens
-once:
+Code in a VM with no network device, which reaches only the same proxy.
+`agents vm update` builds its image. Store the tokens once:
 
 ```sh
 claude setup-token  # then store its output:

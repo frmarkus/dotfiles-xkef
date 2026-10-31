@@ -1,0 +1,15 @@
+# The agent VM's image, which `agentvm build` builds with `container build`
+# from a context that holds the signed Arch Linux ARM rootfs, the proxy's
+# CA certificate, the recipe's source tree, and the scripts beside this
+# file.
+FROM scratch
+ADD alarm.tar.gz /
+
+ARG GUEST_USER
+ARG GUEST_UID
+ARG GUEST_GID
+ARG PROVISION
+COPY prepare.sh session.sh ca.pem source.tar /opt/agentvm/build/
+RUN bash /opt/agentvm/build/prepare.sh /opt/agentvm/build \
+  "$GUEST_USER" "$GUEST_UID" "$GUEST_GID" "$PROVISION" \
+  && rm -r /opt/agentvm/build

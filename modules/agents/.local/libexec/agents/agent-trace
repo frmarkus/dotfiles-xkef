@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Reports the tool calls that failed in Claude Code sessions, read in place
-# from ~/.claude/projects on this machine and from every Lima VM's
+# from ~/.claude/projects on this machine and from the agent VM's
 # transcripts on the host.
 #
 #   agent-trace [--all] [--since <date>] list
@@ -16,9 +16,9 @@
 # every session with --all. A session id picks that one session wherever
 # it ran. --since drops what happened before an ISO 8601 date, such as
 # 2026-09-26, so a restructured repository reports on its current layout. Every row names its environment: this machine's host name, or
-# lima-<vm>. The two differ in sandbox and permissions. Here nono confines
-# the agent and prompts guard its tools. In Lima the VM confines it and
-# prompts stay off.
+# agentvm. The two differ in sandbox and permissions. Here nono confines
+# the agent and prompts guard its tools. In the agent VM the VM confines
+# it and prompts stay off.
 #
 # `list` prints id, environment, start, permission mode, error count,
 # denial count, and title per session. `errors` prints session,
@@ -42,7 +42,7 @@ set -euo pipefail
 
 readonly CLAUDE_PROJECTS="$HOME/.claude/projects"
 readonly AGENTS_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/agents"
-readonly LIMA_GUEST_MARKER=/mnt/lima-cidata
+readonly VM_GUEST_MARKER=/etc/agentvm
 readonly OS_DENIAL_PATTERN='operation not permitted|permission denied|read-only file system|\beperm\b|\beacces\b|sandbox[ _-]?(apply|blocked|denied)'
 # Claude Code's own refusals: permission rules, the auto mode classifier,
 # user rejections, and PreToolUse hooks.
@@ -142,25 +142,24 @@ repo_root() {
   jj --ignore-working-copy root 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null
 }
 
-# Prints "<environment>\t<projects directory>" per transcript source. A
-# Lima guest keeps its transcripts in a host directory that the VM mounts
-# over its ~/.claude/projects, so the host reads them as lima-<vm>. Inside
-# the guest that directory is the local source already.
+# Prints "<environment>\t<projects directory>" per transcript source. The
+# agent VM keeps each repository's transcripts in a host directory that
+# the VM mounts over its ~/.claude/projects, so the host reads them as
+# agentvm. Inside the guest that directory is the local source already.
 sources() {
-  local dir env
+  local dir
   printf '%s\t%s\n' "$(uname -n)" "$CLAUDE_PROJECTS"
-  [ -d "$LIMA_GUEST_MARKER" ] && return
+  [ -e "$VM_GUEST_MARKER" ] && return
 
-  for dir in "$AGENTS_STATE"/lima-*/claude-projects; do
-    [ -d "$dir" ] || continue
-    env=${dir%/claude-projects}
-    printf '%s\t%s\n' "${env##*/}" "$dir"
+  for dir in "${XDG_STATE_HOME:-$HOME/.local/state}"/agentvm/{copies/*,shell}/home/.claude/projects; do
+    [ -d "$dir" ] && printf 'agentvm\t%s\n' "$dir"
   done
+  return 0
 }
 
 # Prints "<environment>\t<transcript>" per session in scope. Claude names
 # each project directory after the session's cwd with every character
-# outside [A-Za-z0-9] turned into "-". `lima-agent` keeps a repository at
+# outside [A-Za-z0-9] turned into "-". `agentvm` keeps a repository at
 # its host path in the guest, so it gets the same name in both
 # environments. A prefix match finds the sessions started in
 # subdirectories too, and the recorded cwd drops the unrelated directories

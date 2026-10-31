@@ -48,9 +48,14 @@ end
 -- split. WezTerm has no floating panes, and a zoomed split stands in for
 -- one: it covers the tab, `z` reveals the panes beneath, and the split
 -- closes when the program exits. No args opens a shell.
+--
+-- A pane's directory comes from whatever runs in it, through OSC 7. Only
+-- a report from this machine counts: a VM pane could name a host folder
+-- it wrote, and git there would run the guest's hooks on the host.
 function M.split(window, pane, args)
   local cwd = pane:get_current_working_dir()
-  local split = pane:split({ args = args, cwd = cwd and cwd.file_path, direction = "Bottom" })
+  local here = cwd and (cwd.host == "" or cwd.host == "localhost" or cwd.host == wezterm.hostname())
+  local split = pane:split({ args = args, cwd = here and cwd.file_path or nil, direction = "Bottom" })
   window:perform_action(act.SetPaneZoomState(true), split)
   return split
 end

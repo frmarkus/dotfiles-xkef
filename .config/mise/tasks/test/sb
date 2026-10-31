@@ -49,7 +49,7 @@ for launch in claude pi; do
   [ -f "modules/agents/.config/nono/profiles/$profile.json" ] || fail "sb $launch picked a missing profile: $profile"
 done
 
-# In the Lima VM, which is the sandbox, Claude Code runs without nono, its
+# In the agent VM, which is the sandbox, Claude Code runs without nono, its
 # own sandbox, or permission prompts.
 cat >"$tmp/bin/claude" <<'EOF'
 #!/bin/sh
@@ -58,10 +58,16 @@ EOF
 chmod +x "$tmp/bin/claude"
 export CLAUDE_LOG="$tmp/claude.log"
 rm "$NONO_LOG"
+# The VM's image holds the skills, and installs inside the VM would land
+# on a disk that the VM throws away.
+mkdir -p "$HOME/.local/libexec/agents"
+printf '#!/bin/sh\ntouch "%s"\n' "$tmp/skills-ran" >"$HOME/.local/libexec/agents/agent-skills"
+chmod +x "$HOME/.local/libexec/agents/agent-skills"
 fish --no-config -c "source modules/agents/.config/fish/functions/sb.fish
   function __sb_in_vm; true; end
   sb claude" 2>/dev/null
 [ ! -e "$NONO_LOG" ] || fail "VM launch ran nono"
+[ ! -e "$tmp/skills-ran" ] || fail "VM launch installed skills"
 grep -qx -- --dangerously-skip-permissions "$CLAUDE_LOG" || fail "VM launch kept permission prompts"
 settings=$(grep -A1 -x -- --settings "$CLAUDE_LOG" | tail -1)
 [ "$(jq -c .sandbox.enabled <<<"$settings")" = false ] || fail "VM launch kept Claude Code's sandbox"

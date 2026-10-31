@@ -32,8 +32,8 @@ switch "$argv[1]"
         # @key agents :: resume :: Search past agent sessions and resume one
         atuin resume $argv[2..-1]
     case vm
-        # @key agents :: vm :: Claude Code or a shell on a repository copy in the Lima VM
-        $libexec/lima-agent $argv[2..-1]
+        # @key agents :: vm :: Claude Code or a shell on a repository copy in the agent VM
+        $libexec/vm-agent $argv[2..-1]
     case help -h --help
         echo "Usage: agents [command]"
         echo ""

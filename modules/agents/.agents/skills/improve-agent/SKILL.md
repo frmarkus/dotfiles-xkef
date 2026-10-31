@@ -27,12 +27,13 @@ agents trace --since <date> sandbox   # Seatbelt denials the tools never reporte
 
 `agents trace` without arguments prints its usage. Transcripts live at
 `~/.claude/projects/<cwd with non-alphanumerics as ->/<id>.jsonl`, with subagent
-transcripts under `<id>/subagents/`. Lima sessions live under
-`~/.local/state/agents/lima-<vm>/claude-projects/` in the same layout.
+transcripts under `<id>/subagents/`. Agent VM sessions live under
+`~/.local/state/agentvm/copies/<repository>/home/.claude/projects/` in the same
+layout.
 
-The environment column separates this machine from `lima-<vm>`. They differ:
-nono confines the agent here and prompts guard its tools, while the VM alone
-confines it in Lima and prompts stay off. In Lima a blocked read shows up as
+The environment column separates this machine from `agentvm`. They differ: nono
+confines the agent here and prompts guard its tools, while the VM alone confines
+it in the agent VM and prompts stay off. There a blocked read shows up as
 `No such file or directory` on a host path the VM doesn't share, not as a
 permission error.
 
@@ -76,5 +77,6 @@ you can't confirm.
 
 Write the report to `.claude-notes/agent-review-<date>.md` with one section per
 analysis. Each finding states what happened, its evidence, the proposed change
-as a diff or rule, and whether it affects this machine, Lima, or both. Show the
-user a summary and apply nothing until they choose which changes to make.
+as a diff or rule, and whether it affects this machine, the agent VM, or both.
+Show the user a summary and apply nothing until they choose which changes to
+make.
