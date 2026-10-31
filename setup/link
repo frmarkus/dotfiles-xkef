@@ -1,6 +1,7 @@
 #!/usr/bin/env -S fish --no-config
 # Links each file under modules/<module>/ to the same path under ~, one
-# file at a time, so apps can add their own files next to them:
+# file at a time, so apps can add their own files next to them. The
+# module's own README.md stays in the repo.
 #
 #   + link    a target that is missing
 #   ! backup  a file in the way moves to <state>/backup/<time>/ first
@@ -29,6 +30,8 @@ for module in $argv[2..-1]
     set -l root $repo/modules/$module
     for source in (find $root -type f -o -type l | sort)
         set -l rel (string replace -- $root/ '' $source)
+        # A module's README.md documents the module for the repo's readers.
+        test $rel = README.md; and continue
         # mise would load a config.toml in the repo as the config of
         # every directory under modules/core, so the repo names it
         # global.toml.

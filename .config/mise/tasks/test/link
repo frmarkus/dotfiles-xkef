@@ -30,6 +30,10 @@ backup=$(find "$state/backup" -path '*/.config/fish/config.fish')
 # name mise reads.
 [ -L "$HOME/.config/mise/config.toml" ] || fail "mise config not renamed"
 
+# A module's top-level README.md documents the module and stays out of ~.
+setup/link "$tmp/readme-state" agents >/dev/null
+[ ! -e "$HOME/README.md" ] || fail "a module README was linked"
+
 # A rerun has nothing to do.
 [ -z "$(setup/link "$state" core)" ] || fail "rerun changed links"
 
