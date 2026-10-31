@@ -4,7 +4,8 @@
 #
 #   + link    a target that is missing
 #   ! backup  a file in the way moves to <state>/backup/<time>/ first
-#   - prune   a link of the last run whose source left the selection
+#   - prune   a link of the last run whose source left the selection,
+#             and the directories it leaves empty
 #
 # <state>/links lists the links of the last run. A dry run prints the
 # changes without making them.
@@ -16,10 +17,12 @@ set -l state $argv[1]
 set -l repo (path resolve (status dirname)/..)
 set -l backup $state/backup/(date +%Y%m%d-%H%M%S)
 set -l links
+set -g changes 0
 
 # Prints one change with ~ for the home directory.
 function report -a sign target
     echo $sign (string replace -- $HOME '~' $target)
+    set -g changes (math $changes + 1)
 end
 
 for module in $argv[2..-1]
@@ -64,9 +67,16 @@ if test -f $state/links
         contains -- $old $links; and continue
         string match -q -- "$repo/modules/*" (readlink $old); or continue
         report - $old
-        set -q _flag_dry_run; or rm $old
+        set -q _flag_dry_run; and continue
+        rm $old
+        set -l dir (path dirname $old)
+        while test $dir != $HOME; and rmdir $dir 2>/dev/null
+            set dir (path dirname $dir)
+        end
     end
 end
+
+test $changes -eq 0; and echo "no link changes"
 
 if not set -q _flag_dry_run
     mkdir -p $state
