@@ -115,6 +115,13 @@ cat >"$tmp/bin/uname" <<'EOF'
 #!/bin/sh
 echo Darwin
 EOF
+# The build clones the rootfs with macOS cp -c, an option GNU cp lacks.
+real_cp=$(command -v cp)
+cat >"$tmp/bin/cp" <<EOF
+#!/bin/sh
+[ "\$1" != -c ] || shift
+exec $real_cp "\$@"
+EOF
 chmod +x "$tmp/bin/"*
 printf '[user]\n\tname = Test\n\temail = test@example.com\n' >"$tmp/gitconfig"
 
