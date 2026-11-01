@@ -46,6 +46,7 @@ keymaps
 Kleppmann
 landlock
 Litt's
+loopback
 lockfiles
 makefile
 mindmaps?
@@ -67,13 +68,15 @@ revsets?
 ripgrep
 sesh
 starship
+stdout
 subcommands?
 taplo
 tmux
 TOML
-toolchain
+toolchains?
 TUI
 tv
+VM(s|'s)?
 unescaped
 unmanaged
 unpushed

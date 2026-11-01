@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Check that agentvm keeps its sandbox: proxy, shares, copy, review, and status"
+#MISE description="Check that agentvm keeps its sandbox: proxy, shares, copy, review, status, and the VM's life"
 set -eu
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-agentvm.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
@@ -11,18 +11,37 @@ fail() {
 }
 
 # Stubs that log every argument list to $ARGV_LOG. The container stub
-# stands in for the VM: it records the proxy file in the shared session
-# directory, which the guest would read and delete, and the snapshot it
-# was asked to copy. socat creates the socket it would listen on. nono
-# keeps the proxy password in $tmp/pass and serves until killed. On
-# Linux, where CI runs, uname reports Darwin.
-mkdir -p "$tmp/bin" "$tmp/home"
+# stands in for the VM: a run records the VM under $VMS with its shares
+# and the proxy file in the exchange directory, an exec plays the guest
+# session in it, and a stop removes it. socat creates the socket it would
+# listen on. nono keeps the proxy password in $tmp/pass and serves until
+# killed. On Linux, where CI runs, uname reports Darwin.
+mkdir -p "$tmp/bin" "$tmp/home" "$tmp/vms"
 cat >"$tmp/bin/container" <<'EOF'
 #!/bin/sh
 echo "container $*" >>"$ARGV_LOG"
-[ "$1" = run ] || exit 0
-# container leaves the terminal it shares non-blocking.
-[ -z "${NONBLOCK:-}" ] || perl -MFcntl -e 'fcntl(STDIN, F_SETFL, fcntl(STDIN, F_GETFL, 0) | O_NONBLOCK) or die'
+case "$1 $2" in
+"list --quiet" | "list --all")
+  ls "$VMS"
+  exit
+  ;;
+"image inspect")
+  [ -z "${NO_IMAGE:-}" ] || { echo "Error: content at path blobs/sha256/9ea7" >&2; exit 1; }
+  exit
+  ;;
+"stop "*)
+  rm "$VMS/$2"
+  exit
+  ;;
+"build "*)
+  while [ $# -gt 1 ]; do shift; done
+  ls "$1" >"$CONTEXT_LOG"
+  exit
+  ;;
+"run "* | "exec "*) ;;
+*) exit 0 ;;
+esac
+shift
 while [ $# -gt 0 ]; do
   case $1 in
   --mount)
@@ -30,45 +49,62 @@ while [ $# -gt 0 ]; do
 $2"
     case $2 in
     *,target=/opt/agentvm/session)
-      session=${2#type=bind,source=}
-      session=${session%%,target=*}
+      exchange=${2#type=bind,source=}
+      exchange=${exchange%%,target=*}
       ;;
     *,target=/opt/agentvm/git,readonly)
       gitdir=${2#type=bind,source=}
       gitdir=${gitdir%%,target=*}
       ;;
     esac
+    shift 2
     ;;
-  --env) case $2 in AGENTVM_SNAPSHOT=?*) echo "${2#*=}" >"$SNAPSHOT_LOG" ;; esac ;;
-  esac
-  shift
-done
-cp "$session/proxy" "$PROXY_LOG"
-rm "$session/proxy"
-# A hostile guest working on the repository at $NEST_ROOT leaves a link
-# where a repository nested in it would get its copy.
-if [ -n "${NEST_ROOT:-}" ]; then
-  echo "$MOUNTS" | while IFS= read -r mount; do
-    case $mount in *",target=$NEST_ROOT")
-      source=${mount#type=bind,source=}
-      ln -s "$HOME" "${source%%,target=*}/inner"
-      ;;
+  --env)
+    case $2 in
+    AGENTVM_SNAPSHOT=?*) echo "${2#*=}" >"$SNAPSHOT_LOG" ;;
+    AGENTVM_STATUS_ID=*) status_id=${2#*=} ;;
     esac
-  done
+    shift 2
+    ;;
+  --name)
+    name=$2
+    shift 2
+    ;;
+  --interactive | --tty | --detach | --rm) shift ;;
+  --*) shift 2 ;;
+  *) break ;;
+  esac
+done
+if [ -n "${name:-}" ]; then
+  # A run: the VM comes up with its shares.
+  printf "exchange='%s'\ngitdir='%s'\n" "$exchange" "$gitdir" >"$VMS/$name"
+  cp "$exchange/proxy" "$PROXY_LOG"
+  # A hostile guest working on the repository at $NEST_ROOT leaves a link
+  # where a repository nested in it would get its copy.
+  if [ -n "${NEST_ROOT:-}" ]; then
+    echo "$MOUNTS" | while IFS= read -r mount; do
+      case $mount in *",target=$NEST_ROOT")
+        source=${mount#type=bind,source=}
+        ln -s "$HOME" "${source%%,target=*}/inner"
+        ;;
+      esac
+    done
+  fi
+  echo "$name"
+  exit
 fi
-# A guest writes a status file, which the host passes on while the VM
-# runs, then removes it.
-if [ -n "${GUEST_STATUS:-}" ]; then
-  mkdir -p "$session/status"
-  printf '%b' "$GUEST_STATUS" >"$session/status/${GUEST_NAME:-state}"
-  [ -z "${GUEST_LINK:-}" ] || ln -sf "$GUEST_LINK" "$session/status/state"
-  sleep 2.5
-  rm -f "$session/status/${GUEST_NAME:-state}"
-  sleep 1.5
-fi
-# Writes a bundle to $1 with one commit that adds pwned on top of the last
-# snapshot, as the guest hands over its changes, and the base to $2.
-bundle() {
+# An exec: the guest session in a running VM.
+name=$1
+[ -f "$VMS/$name" ] || { echo "no such container" >&2; exit 1; }
+. "$VMS/$name"
+mode=$4
+# container leaves the terminal it shares non-blocking.
+[ -z "${NONBLOCK:-}" ] || perl -MFcntl -e 'fcntl(STDIN, F_SETFL, fcntl(STDIN, F_GETFL, 0) | O_NONBLOCK) or die'
+case $mode in
+bundle)
+  [ -n "${CHANGE:-}" ] || exit 0
+  # One commit that adds pwned on top of the last snapshot, as the guest
+  # hands over its changes: the base, then the bundle.
   base=$(cat "$SNAPSHOT_LOG")
   vm=$(mktemp -d)
   git -C "$vm" init -q
@@ -78,32 +114,61 @@ bundle() {
   git -C "$vm" add pwned
   git -C "$vm" commit -q -m vm
   git -C "$vm" update-ref refs/agentvm/vm HEAD
-  git -C "$vm" bundle create -q "$1" refs/agentvm/vm "^$base"
-  echo "${BASE:-$base}" >"$2"
-}
-# A guest that changed the copy hands over its changes.
-[ -z "${CHANGE:-}" ] || bundle "$session/vm.bundle" "$session/base"
-# A hostile guest leaves links where the host writes and reads next.
-[ -z "${VICTIM:-}" ] || ln -s "$VICTIM" "$session/proxy"
-if [ -n "${PLANTED:-}" ]; then
-  bundle "$PLANTED" "$session/base"
-  ln -s "$PLANTED" "$session/vm.bundle"
-fi
+  echo "${BASE:-$base}"
+  git -C "$vm" bundle create -q - refs/agentvm/vm "^$base"
+  ;;
+reset) ;;
+*)
+  # A guest writes a status file in the session's folder, which the host
+  # passes on while the session runs, then removes it.
+  if [ -n "${GUEST_STATUS:-}" ]; then
+    status=$exchange/status/${status_id:-}
+    mkdir -p "$status"
+    printf '%b' "$GUEST_STATUS" >"$status/${GUEST_NAME:-state}"
+    [ -z "${GUEST_LINK:-}" ] || ln -sf "$GUEST_LINK" "$status/state"
+    sleep 2.5
+    rm -f "$status/${GUEST_NAME:-state}"
+    sleep 1.5
+  fi
+  # A hostile guest leaves a link where the host writes next.
+  [ -z "${VICTIM:-}" ] || ln -sf "$VICTIM" "$exchange/proxy"
+  ;;
+esac
 EOF
 cat >"$tmp/bin/socat" <<'EOF'
 #!/bin/sh
 echo "socat $*" >>"$ARGV_LOG"
 [ -z "${SOCAT_FAILS:-}" ] || exit 1
-socket=${1#UNIX-LISTEN:}
-: >"${socket%%,*}"
+case $1 in
+UNIX-LISTEN:*)
+  socket=${1#UNIX-LISTEN:}
+  : >"${socket%%,*}"
+  ;;
+esac
 exec sleep 60
 EOF
 cat >"$tmp/bin/nono" <<'EOF'
 #!/bin/sh
 echo "nono $*" >>"$ARGV_LOG"
 printf '%s' "$NONO_PROXY_PASS" >"$(dirname "$0")/../pass"
-echo "  nono proxy listening on 127.0.0.1:4242"
-exec sleep 60
+[ -z "${NONO_FAILS:-}" ] || exit 1
+port=4242 named=
+while [ $# -gt 0 ]; do
+  [ "$1" != --port ] || [ "$2" = 0 ] || { port=$2 named=1; }
+  shift
+done
+# The port stays bound until the proxy has exited, a moment after the
+# signal. A proxy on port 0 gets another port while 4242 is taken.
+bound="$(dirname "$0")/../bound-$port"
+if [ -e "$bound" ]; then
+  [ -z "$named" ] || { echo "address already in use"; exit 1; }
+  bound=/dev/null
+fi
+[ "$bound" = /dev/null ] || : >"$bound"
+trap '[ "$bound" = /dev/null ] || { sleep 0.1; rm -f "$bound"; }; exit 0' TERM
+echo "  nono proxy listening on 127.0.0.1:$port"
+sleep 60 &
+wait
 EOF
 cat >"$tmp/bin/tmux" <<'EOF'
 #!/bin/sh
@@ -117,6 +182,10 @@ cat >"$tmp/bin/uname" <<'EOF'
 #!/bin/sh
 echo Darwin
 EOF
+cat >"$tmp/bin/sysctl" <<'EOF'
+#!/bin/sh
+echo 8
+EOF
 # The build clones the rootfs with macOS cp -c, an option GNU cp lacks.
 real_cp=$(command -v cp)
 cat >"$tmp/bin/cp" <<EOF
@@ -128,46 +197,31 @@ chmod +x "$tmp/bin/"*
 printf '[user]\n\tname = Test\n\temail = test@example.com\n' >"$tmp/gitconfig"
 
 export HOME="$tmp/home" XDG_STATE_HOME="$tmp/state" XDG_DATA_HOME="$tmp/data" \
-  PATH="$tmp/bin:$PATH" DOTFILES_DIR="$PWD" ARGV_LOG="$tmp/argv.log" \
+  PATH="$tmp/bin:$PATH" DOTFILES_DIR="$PWD" ARGV_LOG="$tmp/argv.log" VMS="$tmp/vms" \
   SNAPSHOT_LOG="$tmp/snapshot" PROXY_LOG="$tmp/proxy" STATUS_LOG="$tmp/status" \
-  GIT_CONFIG_GLOBAL="$tmp/gitconfig" GIT_CONFIG_NOSYSTEM=1
+  CONTEXT_LOG="$tmp/context" GIT_CONFIG_GLOBAL="$tmp/gitconfig" GIT_CONFIG_NOSYSTEM=1
 mkdir -p "$XDG_STATE_HOME/agentvm"
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 -subj /CN=test \
   -keyout "$XDG_STATE_HOME/agentvm/ca.key" -out "$XDG_STATE_HOME/agentvm/ca.pem" 2>/dev/null
 
-# A launch snapshots the working tree of a repository without commits, at
-# a path with a space.
+# Runs agentvm in $repo with stdin closed and its output dropped.
 repo="$tmp/my repo"
+launch() {
+  (cd "$repo" && "$script" "$@" </dev/null >/dev/null 2>&1) || :
+}
+
+# A launch snapshots the working tree of a repository without commits, at
+# a path with a space, and keeps the snapshot under a ref.
 git init -q "$repo"
 echo a >"$repo/a"
 (cd "$repo" && "$script" shell </dev/null >/dev/null 2>"$tmp/err") || fail "the launch failed: $(cat "$tmp/err"): $(cat "$ARGV_LOG")"
 [ "$(git -C "$repo" ls-tree --name-only "$(cat "$SNAPSHOT_LOG")")" = a ] || fail "the snapshot lacks the working tree"
+[ "$(git -C "$repo" rev-parse refs/agentvm/snapshot)" = "$(cat "$SNAPSHOT_LOG")" ] || fail "the snapshot has no ref"
 [ -z "$(git -C "$repo" status --porcelain --untracked-files=no)" ] || fail "the snapshot touched the host's index"
 ! grep -q Terminated "$tmp/err" || fail "stopping the proxy printed a job message"
 
-# tmux learns nothing from OSC 7, so the launcher marks its pane while the
-# VM runs, which the window formats show.
-: >"$ARGV_LOG"
-(cd "$repo" && TMUX_PANE=%9 "$script" shell </dev/null >/dev/null 2>&1) || :
-grep -q "^tmux set -p -t %9 @agentvm 1" "$ARGV_LOG" || fail "the tmux pane was not marked"
-grep -q "^tmux set -pu -t %9 @agentvm" "$ARGV_LOG" || fail "the tmux mark stayed"
-
-# A build prints plain progress, since the redrawn view flickers the cursor.
-: >"$ARGV_LOG"
-mkdir -p "$XDG_DATA_HOME/agentvm"
-echo rootfs >"$XDG_DATA_HOME/agentvm/alarm.tar.gz"
-"$script" build >/dev/null 2>&1 || fail "the build failed: $(cat "$ARGV_LOG")"
-grep -q -- "^container build .*--progress plain" "$ARGV_LOG" || fail "the build redraws its progress"
-
-# The guest's TERM is the host's, since container's default of xterm makes
-# nvim scroll splits with margins that tmux ignores.
-: >"$ARGV_LOG"
-(cd "$repo" && TERM=tmux-256color COLORTERM=truecolor "$script" shell </dev/null >/dev/null 2>&1) || :
-grep -q -- "--env TERM=tmux-256color " "$ARGV_LOG" || fail "the guest did not get the host's TERM"
-grep -q -- "--env COLORTERM=truecolor " "$ARGV_LOG" || fail "the guest did not get the host's COLORTERM"
-
 # The VM gets no network device, and the password reaches it through the
-# session directory, never an argument list.
+# exchange directory, never an argument list.
 grep -q -- "--network none" "$ARGV_LOG" || fail "the session VM got a network device"
 pass=$(cat "$tmp/pass")
 [ -n "$pass" ] || fail "the proxy got no password"
@@ -175,21 +229,103 @@ pass=$(cat "$tmp/pass")
 ! grep -q "$pass" "$ARGV_LOG" || fail "the password showed in an argument list: $(grep "$pass" "$ARGV_LOG")"
 grep -q -- "TCP:127.0.0.1:4242" "$ARGV_LOG" && grep -q -- "/proxy.sock:/opt/agentvm/proxy.sock" "$ARGV_LOG" ||
   fail "the proxy socket was not relayed"
-grep -q "^nono proxy -p agentvm --proxy" "$ARGV_LOG" || fail "the proxy added GitHub without --github"
+grep -q "^nono proxy -p agentvm --port 0 --proxy" "$ARGV_LOG" || fail "the proxy added profiles without --extends"
 for dir in "$XDG_STATE_HOME"/agentvm/session.*; do
   [ ! -e "$dir" ] || fail "the session directory stayed"
 done
+# The proxy's socket takes any host user, so its directory takes none.
+[ "$(ls -ld "$XDG_STATE_HOME"/agentvm/copies/*/run | cut -c1-10)" = drwx------ ] ||
+  fail "other users can reach the run directory"
 
-# take fetches the VM's commits and applies their diff once you answer t.
-# The guest can write to the directory it shares with the host, so a link
-# it leaves there must not redirect the proxy file that the host writes
-# for the second VM, which resets the copy.
+# The VM stays up, so the next session runs in it through exec, with the
+# host's TERM, since container's default of xterm makes nvim scroll splits
+# with margins that tmux ignores.
+: >"$ARGV_LOG"
+(cd "$repo" && TERM=tmux-256color COLORTERM=truecolor "$script" shell </dev/null >/dev/null 2>&1) || :
+! grep -q "^container run" "$ARGV_LOG" || fail "a second session booted a VM"
+! grep -q "^nono" "$ARGV_LOG" || fail "a second session started a proxy"
+grep -q "^container exec .*--env TERM=tmux-256color .* bash /opt/agentvm/guest/session.sh shell" "$ARGV_LOG" ||
+  fail "the second session did not exec into the VM with the host's TERM"
+grep -q -- "--env COLORTERM=truecolor " "$ARGV_LOG" || fail "the guest did not get the host's COLORTERM"
+
+# A session that stacks a profile the proxy lacks restarts the proxy on
+# its port, with the union of profiles, and keeps the VM and bridge. The
+# old proxy holds the port until it exits.
+: >"$ARGV_LOG"
+launch --extends extra shell
+grep -q "^nono proxy -p agentvm --extends extra --port 4242 " "$ARGV_LOG" || fail "the new profile did not join the proxy: $(cat "$ARGV_LOG")"
+! grep -q "^socat" "$ARGV_LOG" || fail "the profile restart replaced the bridge"
+kill -0 "$(cat "$XDG_STATE_HOME"/agentvm/copies/*/run/proxy.pid)" 2>/dev/null ||
+  fail "the proxy did not come back on its port: $(cat "$XDG_STATE_HOME"/agentvm/copies/*/run/proxy.log)"
+: >"$ARGV_LOG"
+launch --extends extra shell
+! grep -q "^nono" "$ARGV_LOG" || fail "a known profile restarted the proxy"
+# A restart that fails leaves its profile out, so the next session tries
+# again.
+NONO_FAILS=1 launch --extends third shell
+: >"$ARGV_LOG"
+launch --extends third shell
+grep -q "^nono proxy .*--extends third " "$ARGV_LOG" || fail "a failed restart counted its profile as joined"
+
+# ls names the VM with its repository, and stop ends the VM, its proxy,
+# and its bridge.
+list=$(cd "$repo" && "$script" ls)
+[[ "$list" == *"running"*"my repo"* ]] || fail "ls missed the VM: $list"
+pids=$(cat "$XDG_STATE_HOME"/agentvm/copies/*/run/pids "$XDG_STATE_HOME"/agentvm/copies/*/run/proxy.pid)
+launch stop
+[ -z "$(ls "$VMS")" ] || fail "stop left the VM running"
+sleep 0.2
+for pid in $pids; do
+  ! kill -0 "$pid" 2>/dev/null || fail "stop left process $pid of the proxy"
+done
+[ -z "$(ls -d "$XDG_STATE_HOME"/agentvm/copies/*/run 2>/dev/null)" ] || fail "stop left the run directory"
+
+# tmux learns nothing from OSC 7, so the launcher marks its pane while the
+# session runs, which the window formats show.
+: >"$ARGV_LOG"
+(cd "$repo" && TMUX_PANE=%9 "$script" shell </dev/null >/dev/null 2>&1) || :
+grep -q "^tmux set -p -t %9 @agentvm 1" "$ARGV_LOG" || fail "the tmux pane was not marked"
+grep -q "^tmux set -pu -t %9 @agentvm" "$ARGV_LOG" || fail "the tmux mark stayed"
+
+# A VM that went away under its run directory, as after a reboot, leaves
+# a link where the host writes the next proxy password. The next session
+# clears the directory and starts anew.
 victim="$tmp/victim"
 echo untouched >"$victim"
-(cd "$repo" && echo t | CHANGE=1 VICTIM="$victim" "$script" take >/dev/null 2>&1) || :
-[ "$(cat "$repo/pwned" 2>/dev/null)" = pwned ] || fail "take did not apply the VM's changes"
+(cd "$repo" && VICTIM="$victim" "$script" shell </dev/null >/dev/null 2>&1) || :
+rm "$VMS"/*
+: >"$ARGV_LOG"
+launch shell
+grep -q "^container run" "$ARGV_LOG" || fail "a lost VM did not start anew"
 [ "$(cat "$victim")" = untouched ] || fail "the host wrote through a link the guest left"
+
+# A build prints plain progress, since the redrawn view flickers the
+# cursor, gets the host's cores, keeps the builder's cache, and gives the
+# context the recipe's base apart from the whole tree. --fresh empties the
+# builder and skips the cache.
+: >"$ARGV_LOG"
+mkdir -p "$XDG_DATA_HOME/agentvm"
+echo rootfs >"$XDG_DATA_HOME/agentvm/alarm.tar.gz"
+"$script" build >/dev/null 2>&1 || fail "the build failed: $(cat "$ARGV_LOG")"
+grep -q -- "^container build --progress plain --cpus 8 " "$ARGV_LOG" || fail "the build redraws its progress or runs on 2 cores"
+! grep -q "^container builder delete" "$ARGV_LOG" || fail "the build threw the layer cache away"
+grep -qx base.tar "$CONTEXT_LOG" && grep -qx source.tar "$CONTEXT_LOG" || fail "the context lacks the recipe: $(cat "$CONTEXT_LOG")"
+: >"$ARGV_LOG"
+"$script" build --fresh >/dev/null 2>&1 || fail "the fresh build failed"
+grep -q "^container builder delete" "$ARGV_LOG" && grep -q -- "--no-cache" "$ARGV_LOG" || fail "--fresh kept the cache"
+
+# Without a usable image, the launch says why.
+launch stop
+(cd "$repo" && NO_IMAGE=1 "$script" shell </dev/null >/dev/null 2>"$tmp/err") && fail "a launch without an image succeeded"
+grep -q "blobs/sha256/9ea7" "$tmp/err" || fail "the image error was lost: $(cat "$tmp/err")"
+
+# take fetches the VM's commits from the guest's output and applies their
+# diff once you answer t, then resets the copy in the VM.
+: >"$ARGV_LOG"
+(cd "$repo" && echo t | CHANGE=1 "$script" take >/dev/null 2>&1) || :
+[ "$(cat "$repo/pwned" 2>/dev/null)" = pwned ] || fail "take did not apply the VM's changes: $(cat "$ARGV_LOG")"
 git -C "$repo" rev-parse -q --verify refs/remotes/agentvm/vm >/dev/null || fail "the VM's commits are not agentvm/vm"
+grep -q "session.sh reset$" "$ARGV_LOG" || fail "take did not reset the copy"
 rm "$repo/pwned"
 
 # The review waits for an answer that comes late, even after the VM left
@@ -198,19 +334,20 @@ rm "$repo/pwned"
 [ "$(cat "$repo/pwned" 2>/dev/null)" = pwned ] || fail "the review read no answer from a non-blocking stdin"
 rm "$repo/pwned"
 
-# A bundle the guest planted as a link, or one that builds on a commit the
-# repository lacks, never reaches the repository.
-(cd "$repo" && echo t | PLANTED="$tmp/planted.bundle" "$script" take >/dev/null 2>&1) || :
-[ ! -e "$repo/pwned" ] || fail "the host fetched a bundle through a link the guest left"
+# A bundle that builds on a commit the repository lacks never reaches the
+# repository.
 (cd "$repo" && echo t | CHANGE=1 BASE=0123456789abcdef0123456789abcdef01234567 "$script" take >/dev/null 2>&1) || :
 [ ! -e "$repo/pwned" ] || fail "the host took changes on an unknown base"
 
-# A session VM sees only its repository's folders and the clipboard. The
-# host's agent state and the dotfiles, ignored files included, stay out,
-# and the caches belong to the repository, so one repository's VM can't
-# plant tools that another repository's session runs.
+# A VM sees only its repository's folders, the clipboard, and the paths
+# the session shares. The host's agent state and the dotfiles, ignored
+# files included, stay out, and the caches belong to the repository, so
+# one repository's VM can't plant tools that another repository's session
+# runs.
+launch stop
 : >"$ARGV_LOG"
-(cd "$repo" && "$script" shell </dev/null >/dev/null 2>&1) || :
+mkdir -p "$tmp/docs"
+launch --mount "$tmp/docs:ro" --publish 3000 shell
 ! grep -q -- "source=$XDG_STATE_HOME/agents[,/]" "$ARGV_LOG" || fail "a launch shared the host's agent state"
 ! grep -q -- "source=$DOTFILES_DIR," "$ARGV_LOG" || fail "a launch shared the dotfiles"
 grep -q -- "source=$XDG_STATE_HOME/agentvm/copies/.*/home/.cache,target=" "$ARGV_LOG" || fail "the caches are not the repository's own"
@@ -218,6 +355,12 @@ grep -q -- "source=$XDG_STATE_HOME/agentvm/copies/.*/home/.cache,target=" "$ARGV
 # may only read it, or it could plant a link the host's next write follows.
 grep -q -- "source=$HOME/.cache/agentvm-clipboard,target=$HOME/.cache/agentvm-clipboard,readonly " "$ARGV_LOG" ||
   fail "the clipboard folder is shared writable"
+grep -q -- "--mount type=bind,source=$tmp/docs,target=$tmp/docs,readonly " "$ARGV_LOG" || fail "the read-only share was not mounted"
+grep -q -- "--publish-socket .*/run/ports/3000:/home/$USER/.local/state/agentvm/ports/3000 " "$ARGV_LOG" &&
+  grep -q "^socat TCP-LISTEN:3000,bind=127.0.0.1,fork,reuseaddr UNIX-CONNECT:.*/run/ports/3000$" "$ARGV_LOG" ||
+  fail "the port was not published"
+grep -q -- "--env AGENTVM_PORTS=3000 " "$ARGV_LOG" || fail "the guest did not learn the port"
+launch stop
 
 # A repository nested in another must not get its copy inside the outer
 # copy, where the outer repository's VM can swap the folder for a link.
@@ -230,29 +373,36 @@ git init -q "$outer/inner"
 inner_copy=$(tr ' ' '\n' <"$ARGV_LOG" | sed -n "s|^type=bind,source=\(.*\),target=$outer/inner\$|\1|p")
 [ -n "$inner_copy" ] || fail "the nested repository got no copy"
 [ "$(cd "$inner_copy" && pwd -P)" != "$(cd "$HOME" && pwd -P)" ] || fail "a nested copy followed a link the guest left"
+(cd "$outer" && "$script" stop >/dev/null 2>&1) || :
+(cd "$outer/inner" && "$script" stop >/dev/null 2>&1) || :
 
 # The launcher refuses its own state, where a VM pane's reported folder
-# could lead the host into a repository the guest wrote.
+# could lead the host into a repository the guest wrote, and a pane
+# folder the host lacks.
 mkdir -p "$XDG_STATE_HOME/agentvm/copies/planted"
 git init -q "$XDG_STATE_HOME/agentvm/copies/planted"
 ! (cd "$XDG_STATE_HOME/agentvm/copies/planted" && "$script" pane "$PWD" </dev/null >/dev/null 2>&1) ||
   fail "the launcher ran inside its own state"
+! (cd "$repo" && "$script" pane "$tmp/nowhere" </dev/null >/dev/null 2>&1) || fail "a pane opened for a folder the host lacks"
 
 # take shows the changes and asks first. Without an answer it keeps them.
 (cd "$repo" && CHANGE=1 "$script" take </dev/null >/dev/null 2>&1) || :
 [ ! -e "$repo/pwned" ] || fail "take applied the changes without asking"
+launch stop
+
 # A machine adds its own hosts through an untracked local profile, which
 # the proxy stacks on top.
 mkdir -p "$HOME/.config/nono/profiles"
 echo '{}' >"$HOME/.config/nono/profiles/agentvm-local.json"
 : >"$ARGV_LOG"
-(cd "$repo" && "$script" shell </dev/null >/dev/null 2>&1) || :
+launch shell
 grep -q "^nono proxy -p agentvm --extends agentvm-local " "$ARGV_LOG" || fail "the local profile was left out"
 rm "$HOME/.config/nono/profiles/agentvm-local.json"
+launch stop
 
 # The guest's status files reach the --on-status command as NAME VALUE,
 # with VALUE in printable text, an empty VALUE when a file goes, and no
-# arguments when the VM stops. Links and other names don't reach it.
+# arguments when the session ends. Links and other names don't reach it.
 status() {
   : >"$STATUS_LOG"
   (cd "$repo" && "$@" "$script" --on-status "$tmp/bin/on-status" shell </dev/null >/dev/null 2>&1) || :
@@ -267,8 +417,16 @@ status env GUEST_STATUS='x' GUEST_LINK="$tmp/secret"
 ! grep -q secret "$STATUS_LOG" || fail "the host read through a link the guest left"
 status env GUEST_STATUS='busy' GUEST_NAME='bad name'
 ! grep -q 'bad name' "$STATUS_LOG" || fail "the status command got a name outside the allowed set"
+# Two sessions in one VM each report only their own status.
+status env GUEST_STATUS='busy' &
+sleep 0.5
+(cd "$repo" && GUEST_STATUS=idle STATUS_LOG="$tmp/status2" "$script" --on-status "$tmp/bin/on-status" shell </dev/null >/dev/null 2>&1) || :
+wait
+! grep -q idle "$STATUS_LOG" && ! grep -q busy "$tmp/status2" || fail "another session's status reached this one"
+launch stop
+
 # A bridge that dies before it listens stops the launch instead of
-# leaving it waiting for the socket.
+# leaving it waiting for the socket, and leaves no VM behind.
 (cd "$repo" && SOCAT_FAILS=1 "$script" shell </dev/null >/dev/null 2>&1) &
 launch=$!
 for _ in $(seq 50); do
@@ -281,6 +439,24 @@ if kill -0 "$launch" 2>/dev/null; then
   fail "a dead bridge left the launch waiting"
 fi
 ! wait "$launch" || fail "a dead bridge let the launch succeed"
+[ -z "$(ls -d "$XDG_STATE_HOME"/agentvm/copies/*/run 2>/dev/null)" ] || fail "a failed start left its run directory"
+
+# prune stops every VM, this script's and an older one's, with their
+# proxies, and frees the builder and the unused images. The copies stay.
+launch shell
+: >"$tmp/vms/agentvm-4242-17"
+pids=$(cat "$XDG_STATE_HOME"/agentvm/copies/*/run/pids "$XDG_STATE_HOME"/agentvm/copies/*/run/proxy.pid)
+: >"$ARGV_LOG"
+"$script" prune >/dev/null 2>&1 || fail "prune failed: $(cat "$ARGV_LOG")"
+[ -z "$(ls "$VMS")" ] || fail "prune left a VM running: $(ls "$VMS")"
+sleep 0.2
+for pid in $pids; do
+  ! kill -0 "$pid" 2>/dev/null || fail "prune left process $pid of the proxy"
+done
+grep -q "^container builder delete" "$ARGV_LOG" && grep -q "^container image prune" "$ARGV_LOG" ||
+  fail "prune kept the builder or the images"
+[ -n "$(ls -d "$XDG_STATE_HOME"/agentvm/copies/*/copy 2>/dev/null)" ] || fail "prune removed a copy"
+
 # The review shows the guest's patch through the diff pager only after
 # every control character in it turned into visible text, so none
 # reaches the terminal. Tabs, newlines, and UTF-8 text stay.

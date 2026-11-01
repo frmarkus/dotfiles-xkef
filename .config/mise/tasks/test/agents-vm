@@ -32,15 +32,22 @@ done
 # transcripts kept per repository, and the picker's status command.
 "$libexec/vm-agent" claude --resume
 expected=$(printf '%s\n' --extends agentvm-claude --env CLAUDE_CODE_OAUTH_TOKEN=nono-proxy \
-  --persist .claude/projects --on-status "$libexec/vm-status" run -- claude --resume)
+  --env DISABLE_AUTOUPDATER=1 --persist .claude/projects --on-status "$libexec/vm-status" \
+  run -- claude --resume)
 [ "$(cat "$ARGV_LOG")" = "$expected" ] || fail "agents vm claude passed: $(cat "$ARGV_LOG")"
 
-# --github stacks the GitHub routes and a placeholder for gh.
-"$libexec/vm-agent" shell --github
+# --github stacks the GitHub routes and a placeholder for gh, and
+# --publish serves a port.
+"$libexec/vm-agent" shell --github --publish 3000
 grep -qx agents "$ARGV_LOG" && grep -qx GH_TOKEN=nono-proxy "$ARGV_LOG" && grep -qx shell "$ARGV_LOG" ||
   fail "--github passed: $(cat "$ARGV_LOG")"
-"$libexec/vm-agent" build
-[ "$(cat "$ARGV_LOG")" = build ] || fail "build passed: $(cat "$ARGV_LOG")"
+grep -qx -- --publish "$ARGV_LOG" && grep -qx 3000 "$ARGV_LOG" || fail "--publish passed: $(cat "$ARGV_LOG")"
+"$libexec/vm-agent" build --fresh
+[ "$(cat "$ARGV_LOG")" = "$(printf 'build\n--fresh')" ] || fail "build passed: $(cat "$ARGV_LOG")"
+"$libexec/vm-agent" stop
+[ "$(tail -n 1 "$ARGV_LOG")" = stop ] || fail "stop passed: $(cat "$ARGV_LOG")"
+"$libexec/vm-agent" ls
+[ "$(cat "$ARGV_LOG")" = ls ] || fail "ls passed: $(cat "$ARGV_LOG")"
 ! "$libexec/vm-agent" bogus >/dev/null 2>&1 || fail "an unknown command succeeded"
 
 # vm-status writes the picker entry for this pane from the guest's

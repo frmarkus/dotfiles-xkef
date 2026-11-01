@@ -34,7 +34,8 @@ Each step can run again without harm, so a rerun repairs whatever drifted.
 `dots diff` prints the link changes without making them.
 
 The machine's state lives in `~/.local/state/dotfiles`, which the repo links as
-`state/`:
+`state/`, next to the agent VM's state at `~/.local/state/agentvm`, linked as
+`vm/`:
 
 - `modules` selects the modules under `modules/`. A machine gets `core`,
   `desktop`, and `agents`, and the agent VM gets `core` and `agents`. The extras

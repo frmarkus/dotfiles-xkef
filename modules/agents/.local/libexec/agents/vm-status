@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Maps the agent VM's status into the picker's entry for this pane.
 # agentvm runs it as `--on-status` with NAME VALUE when the guest changes a
-# status file, VALUE in printable text only, and alone when the VM stops.
+# status file, VALUE in printable text only, and alone when the session
+# ends.
 #
 # In the guest, agent-state keeps its entries in the status folder under
 # the fixed key that agentvm/guest.d/agents.sh sets, so the record and the

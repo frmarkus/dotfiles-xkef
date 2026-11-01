@@ -10,22 +10,28 @@ readonly AGENTVM="$HOME/.local/libexec/agentvm/agentvm"
 
 usage() {
   cat <<EOF
-Usage: agents vm <command> [args...]
+Usage: agents vm <command> [options] [args...]
 
 Runs Claude Code or a shell in the agent VM: a microVM on a copy of this
 repository, with no network device. Its only way out is a proxy that adds
 your tokens and reaches only allowed hosts.
 
 Commands:
-  claude [--github] [args...]  Claude Code, permission prompts off
-  shell [--github]             fish in the VM
-  take                         show the VM copy's changes, then apply or keep
-  drop                         discard the VM copy's changes
-  build                        rebuild the VM image, after dotfiles changes
-  help                         show this help
+  claude [args...]   Claude Code, permission prompts off
+  shell              fish in the VM
+  take               show the VM copy's changes, then apply or keep
+  drop               discard the VM copy's changes
+  stop               stop this repository's VM
+  ls                 list the VMs
+  build [--fresh]    rebuild the VM image, after dotfiles changes
+  prune              stop every VM and free the builder and unused images
+  help               show this help
 
-  --github  give the session GitHub through the proxy
+Options for claude and shell:
+  --github        give the session GitHub through the proxy
+  --publish PORT  serve the guest's PORT on the host's loopback
 
+The repository's VM starts with the first session and runs until stop.
 The VM works on a copy of the repository. When a session ends, its changes
 come back as commits, agentvm/vm in git and vm@agentvm in jj, and you take,
 drop, or keep them. Kept changes stay in the copy for the next session.
@@ -41,7 +47,7 @@ help | -h | --help)
   usage
   exit
   ;;
-claude | shell | pane | take | drop | build) ;;
+claude | shell | pane | take | drop | stop | ls | build | prune) ;;
 *)
   usage >&2
   exit 2
@@ -53,18 +59,30 @@ if [ ! -x "$AGENTVM" ]; then
   exit 1
 fi
 
+# The VM throws its disk away, so an update Claude Code fetched would
+# download again every session. The image carries the version.
 args=(
   --extends agentvm-claude --env "CLAUDE_CODE_OAUTH_TOKEN=$PLACEHOLDER"
+  --env DISABLE_AUTOUPDATER=1
   --persist .claude/projects --on-status "${0%/*}/vm-status"
 )
-if [ "${1:-}" = --github ]; then
-  args+=(--extends agents --env "GH_TOKEN=$PLACEHOLDER")
-  shift
-fi
+while [ $# -gt 0 ]; do
+  case $1 in
+  --github)
+    args+=(--extends agents --env "GH_TOKEN=$PLACEHOLDER")
+    shift
+    ;;
+  --publish)
+    args+=(--publish "${2:?}")
+    shift 2
+    ;;
+  *) break ;;
+  esac
+done
 
 case "$command" in
 claude) exec "$AGENTVM" "${args[@]}" run -- claude "$@" ;;
-build) exec "$AGENTVM" build ;;
+build | ls | prune) exec "$AGENTVM" "$command" "$@" ;;
 # WezTerm runs pane for a split of a VM pane.
 pane) exec "$AGENTVM" "${args[@]}" pane "${1:?}" ;;
 *) exec "$AGENTVM" "${args[@]}" "$command" ;;

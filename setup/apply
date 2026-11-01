@@ -49,10 +49,14 @@ set -g modules (string trim <$state/modules |
     string match -rv '^(#.*)?$')
 
 # The repo links the state as state/, which git ignores, so the
-# selection and the links sit next to the modules. The agent VM's image
-# holds a read-only copy of the repo, which gets no link.
+# selection and the links sit next to the modules, and the agent VM's
+# copies and runtime as vm/. The agent VM's image holds a read-only copy
+# of the repo, which gets neither link.
 if test -w $repo; and not test -L $repo/state
     ln -s $state $repo/state
+end
+if test -w $repo; and not test -L $repo/vm
+    ln -s (path dirname $state)/agentvm $repo/vm
 end
 
 function selected -a module

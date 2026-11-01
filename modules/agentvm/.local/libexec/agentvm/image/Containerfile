@@ -1,15 +1,23 @@
 # The agent VM's image, which `agentvm build` builds with `container build`
 # from a context that holds the signed Arch Linux ARM rootfs, the proxy's
-# CA certificate, the recipe's source tree, and the scripts beside this
-# file.
+# CA certificate, the recipe's base and source trees, and prepare.sh. The
+# guest script comes from the host at run time.
 FROM scratch
 ADD alarm.tar.gz /
 
 ARG GUEST_USER
 ARG GUEST_UID
 ARG GUEST_GID
-ARG PROVISION
-COPY prepare.sh session.sh ca.pem source.tar /opt/agentvm/build/
+
+# The sandbox's own setup and the recipe's packages. The builder caches
+# this layer until its inputs change.
+COPY prepare.sh ca.pem base.tar /opt/agentvm/build/
 RUN bash /opt/agentvm/build/prepare.sh /opt/agentvm/build \
-  "$GUEST_USER" "$GUEST_UID" "$GUEST_GID" "$PROVISION" \
-  && rm -r /opt/agentvm/build
+  "$GUEST_USER" "$GUEST_UID" "$GUEST_GID"
+
+# The recipe's provision on the whole tree, redone after every change.
+COPY source.tar /opt/agentvm/build/
+RUN tar -xOf /opt/agentvm/build/source.tar setup/agentvm/provision >/root/provision \
+  && bash /root/provision /opt/agentvm/build/source.tar "$GUEST_USER" \
+  && rm -r /root/provision /opt/agentvm/build \
+  && pacman -Scc --noconfirm

@@ -1,6 +1,7 @@
 command_timeout = 1000
 
 format = """
+${custom.agentvm}\
 ${custom.cwd}\
 $character"""
 
@@ -77,6 +78,15 @@ copied = '[=${count}](green) '
 deleted = '[-${count}](red) '
 modified = '[!${count}](red) '
 renamed = '[»${count}](yellow) '
+
+# The shield that WezTerm and the picker put on agent VM panes, in the
+# VM itself, which the image marks with /etc/agentvm.
+[custom.agentvm]
+when = 'test -e /etc/agentvm'
+shell = ['sh']
+symbol = ' '
+style = 'bold yellow'
+format = '[$symbol]($style)'
 
 # Without `shell`, starship runs the command in $STARSHIP_SHELL, and a
 # fish start costs about 80ms on every prompt. sh costs about 3ms.

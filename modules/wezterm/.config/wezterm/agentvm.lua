@@ -10,7 +10,8 @@ local act = wezterm.action
 local M = {}
 
 -- The prefix of the host names that `agents vm` reports. Each VM takes
--- its container's name, such as agentvm-4242-17.
+-- its container's name, which agentvm derives from the repository, such
+-- as agentvm-dotfiles-c929ff41.
 M.HOST = "agentvm"
 -- The shield that marks sandbox panes in tab titles and the status line.
 M.MARK = ""

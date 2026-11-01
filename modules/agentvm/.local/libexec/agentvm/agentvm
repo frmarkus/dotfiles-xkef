@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs a command in a microVM on a copy of the current repository. The VM
 # is the sandbox: it has no network device, and its only way out is a
-# socket to this session's credential proxy, which reaches only the hosts
-# that the agentvm nono profile allows.
+# socket to a credential proxy, which reaches only the hosts that the
+# agentvm nono profile allows.
 #
 #   agentvm [options] run -- CMD [ARGS...]   CMD in the VM's login shell
 #   agentvm [options] shell                  a login shell
@@ -10,14 +10,30 @@
 #                                            copy as it stands
 #   agentvm take                             apply the copy's changes here
 #   agentvm drop                             discard the copy's changes
-#   agentvm build                            build the image
+#   agentvm stop                             stop this repository's VM
+#   agentvm ls                               list the VMs
+#   agentvm build [--fresh]                  build the image, --fresh
+#                                            without the layer cache
+#   agentvm prune                            stop every VM and free the
+#                                            builder and unused images
 #
 #   --extends PROFILE   stack a nono profile on the proxy (repeatable)
-#   --env KEY=VALUE     set a variable in the VM (repeatable)
+#   --env KEY=VALUE     set a variable in the session (repeatable)
 #   --persist PATH      keep this path under the guest's home between
 #                       sessions, per repository (repeatable)
+#   --mount PATH[:ro]   share this host path at the same path (repeatable)
+#   --publish PORT      serve the guest's PORT on the host's loopback
+#                       (repeatable)
+#   --cpus N            the VM's CPUs, 4 unless set
+#   --memory SIZE       the VM's memory, 8G unless set
 #   --on-status CMD     run CMD NAME VALUE when the guest changes a status
-#                       file, and CMD alone when the VM stops
+#                       file, and CMD alone when the session ends
+#
+# Each repository gets one VM, which the first session starts and `stop`
+# ends. Later sessions, panes, take, and drop run inside it through
+# `container exec`, so they pay no boot. The VM's shares, ports, size,
+# and proxy profiles come from the session that started it, except that
+# a later session's profiles join the proxy's.
 #
 # The guest fetches the host's working tree as a commit into a copy that
 # lives on the host, in the repository's folder under $STATE/copies, and
@@ -26,8 +42,8 @@
 # after you review it, and host git never runs inside the copy, so
 # nothing the VM writes runs on the host before then.
 #
-# guest/session.sh runs in the VM around the command, and image/ holds
-# what `agentvm build` builds the image from.
+# guest/session.sh runs in the VM, and image/ holds what `agentvm build`
+# builds the image from.
 set -euo pipefail
 
 readonly LIBEXEC="${BASH_SOURCE[0]%/*}"
@@ -40,14 +56,20 @@ readonly CLIPBOARD="$HOME/.cache/agentvm-clipboard"
 readonly LOCAL_PROFILE=agentvm-local
 
 readonly IMAGE=agentvm:latest
-readonly CPUS=4 MEMORY=8G
-# The prefix of the VM's host name, which `container` takes from the
-# container's name. WezTerm reads it from OSC 7.
+readonly DEFAULT_CPUS=4 DEFAULT_MEMORY=8G
+# The prefix of the VMs' names, which `container` makes their host
+# names. WezTerm reads the name from OSC 7.
 readonly HOST=agentvm
 readonly GUEST_HOME="/home/$USER"
 # The guest side of the shared directories, as guest/session.sh expects
 # them.
 readonly GUEST_DIR=/opt/agentvm
+# The host's guest/ directory, mounted read-only, so the guest runs the
+# script this one expects whatever image the VM has.
+readonly GUEST_SESSION=$GUEST_DIR/guest/session.sh
+# Where the guest listens for a published port: its own disk, since a
+# shared directory takes no Unix socket.
+readonly GUEST_PORTS="$GUEST_HOME/.local/state/agentvm/ports"
 # Paths under the guest's home that every session keeps per repository.
 readonly CACHES=(.cache .local/share/mise .local/share/cargo .local/share/go)
 
@@ -62,9 +84,10 @@ readonly STATUS_FILES=16 STATUS_BYTES=512
 readonly ALARM=http://os.archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz
 readonly ALARM_KEYRING=https://raw.githubusercontent.com/archlinuxarm/archlinuxarm-keyring/master/archlinuxarm.gpg
 readonly ALARM_KEY=68B3537F39A313B3E574D06777193F152BDBE6A6
-# The recipe: what the dotfiles put in the image, run after the sandbox's
-# own setup.
-readonly PROVISION=setup/agentvm/provision
+# The recipe, in the dotfiles: the packages script and its list go into
+# the image's cached layer, and image/Containerfile runs the provision
+# script on the whole tree in the last one.
+readonly RECIPE_BASE=(setup/agentvm/packages setup/packages/arch/sandbox.txt)
 
 # nono rejects LibreSSL's EC keys, and Homebrew keeps openssl@3 keg-only.
 OPENSSL="${HOMEBREW_PREFIX:-/opt/homebrew}/opt/openssl@3/bin/openssl"
@@ -74,38 +97,62 @@ readonly OPENSSL
 main() {
   [ "$(uname -s)" = Darwin ] || die "the VM runs on macOS"
   parse_args "$@"
-  if [ "$mode" = build ]; then
+  mkdir -p "$STATE"
+  case "$mode" in
+  build)
     build
     return
-  fi
-  container image inspect "$IMAGE" >/dev/null 2>&1 || die "no image yet, which agents vm build builds"
+    ;;
+  ls)
+    list_vms
+    return
+    ;;
+  prune)
+    prune
+    return
+    ;;
+  esac
 
   find_repository
   open_session
   case "$mode" in
+  stop) stop_vm ;;
   take)
-    guest bundle </dev/null
+    ensure_vm
+    fetch_bundle
     review
     ;;
-  drop) guest reset ;;
+  drop)
+    ensure_vm
+    guest reset </dev/null
+    ;;
   *) run_session ;;
   esac
 }
 
 # Sets $mode, its arguments in $args, and the options.
 parse_args() {
-  extends=()
+  profiles=()
   env=()
   persist=()
+  mounts=()
+  ports=()
+  cpus=$DEFAULT_CPUS
+  memory=$DEFAULT_MEMORY
   on_status=
-  [ ! -f "$HOME/.config/nono/profiles/$LOCAL_PROFILE.json" ] || extends+=(--extends "$LOCAL_PROFILE")
+  fresh=
+  [ ! -f "$HOME/.config/nono/profiles/$LOCAL_PROFILE.json" ] || profiles+=("$LOCAL_PROFILE")
   while [ $# -gt 0 ]; do
     case $1 in
-    --extends) extends+=(--extends "${2:?}") ;;
+    --extends) profiles+=("${2:?}") ;;
     --env) env+=(--env "${2:?}") ;;
     --persist) persist+=("${2:?}") ;;
+    --mount) mounts+=("${2:?}") ;;
+    --publish) ports+=("${2:?}") ;;
+    --cpus) cpus=${2:?} ;;
+    --memory) memory=${2:?} ;;
     --on-status) on_status=${2:?} ;;
-    -h | --help) usage ;;
+    -h | --help) usage 0 ;;
     *) break ;;
     esac
     shift 2
@@ -116,11 +163,14 @@ parse_args() {
   case "$mode" in
   run)
     [ "${1:-}" != -- ] || shift
-    [ $# -gt 0 ] || usage
+    [ $# -gt 0 ] || usage 2
     ;;
-  shell | take | drop | build) ;;
-  pane) [ $# -eq 1 ] || usage ;;
-  *) usage ;;
+  shell | take | drop | stop | ls | prune) ;;
+  pane) [ $# -eq 1 ] || usage 2 ;;
+  build)
+    [ "${1:-}" != --fresh ] || fresh=1
+    ;;
+  *) usage 2 ;;
   esac
   args=("$@")
 }
@@ -130,13 +180,12 @@ parse_args() {
 #
 # Git in a repository the guest wrote, such as a copy, can run that
 # guest's hooks and config on the host. A split of a VM pane passes the
-# folder the guest reported, so the check covers it. A guest folder
-# without a host counterpart opens the pane outside a repository.
+# folder the guest reported, so the check covers it. The folder names
+# the VM, so it must exist on the host too.
 find_repository() {
   if [ "$mode" = pane ]; then
-    cd "${args[0]}" 2>/dev/null || cd
+    cd "${args[0]}" 2>/dev/null || die "${args[0]} is not a folder on the host"
   fi
-  mkdir -p "$STATE"
   case "$(pwd -P)/" in
   "$(cd "$STATE" && pwd -P)"/*) die "refusing to run inside $STATE" ;;
   esac
@@ -146,14 +195,14 @@ find_repository() {
   if git rev-parse --show-toplevel >/dev/null 2>&1; then
     root=$(git rev-parse --show-toplevel)
     workdir="$root/$(git rev-parse --show-prefix)"
-  elif [ "$mode" != shell ] && [ "$mode" != pane ]; then
+  elif [ "$mode" != shell ] && [ "$mode" != pane ] && [ "$mode" != stop ]; then
     die "$PWD is not in a git repository"
   fi
   [ "$mode" != pane ] || workdir=${args[0]}
 }
 
-# Creates the session's private folder, which the exit removes, and the
-# repository's folder, and starts the proxy.
+# Creates the session's private folder, which the exit removes, and
+# names the repository's folder and VM.
 #
 # The repository's folder holds what the VM mounts. Each sits directly
 # in copies/, which only the host writes. Named after the repository's
@@ -161,43 +210,57 @@ find_repository() {
 # the outer repository's VM could swap it for a link to any host
 # directory. A shell outside a repository gets a folder of its own.
 open_session() {
+  local hash slug
   session=$(umask 077 && mktemp -d "$STATE/session.XXXXXX")
-  pids=()
   trap cleanup EXIT
 
   if [ -n "$root" ]; then
-    folder="$STATE/copies/${root##*/}-$(printf '%s' "$root" | shasum -a 256 | cut -c1-16)"
+    hash=$(printf '%s' "$root" | shasum -a 256 | cut -c1-16)
+    folder="$STATE/copies/${root##*/}-$hash"
+    slug=$(printf '%s' "${root##*/}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')
+    name="$HOST-${slug:0:32}-${hash:0:8}"
   else
     folder="$STATE/shell"
+    name="$HOST-shell"
   fi
-  mkdir -p "$folder/copy" "$CLIPBOARD"
-
-  ensure_ca
-  start_proxy "$session/proxy.sock"
+  # The VM's runtime: the proxy, the bridge, and the exchange directory.
+  run="$folder/run"
+  mkdir -p "$folder"
+  # What every guest process needs, at the VM's start and in each exec,
+  # since an exec may not inherit the VM's environment.
+  guest_env=(
+    --env "HOME=$GUEST_HOME" --env "USER=$USER" --env "AGENTVM_ROOT=$root"
+    --env "AGENTVM_NAME=$(git config user.name || echo "$USER")"
+    --env "AGENTVM_EMAIL=$(git config user.email || echo "$USER@localhost")"
+  )
 }
 
-# Runs the command, the shell, or the pane in a VM, then reviews what the
-# command and the shell changed in the copy.
+# Runs the command, the shell, or the pane in the VM, then reviews what
+# the command and the shell changed in the copy.
 run_session() {
   local rc=0
+  ensure_vm
   if [ "$mode" != pane ] && [ -n "$root" ]; then
     snap=$(snapshot)
   fi
   mark_pane
+  [ "$mode" = pane ] || start_status
   guest "$mode" ${args[@]+"${args[@]}"} || rc=$?
-  if [ "$mode" != pane ] && [ -n "$root" ] && [ -s "$session/vm.bundle" ]; then
+  stop_status
+  if [ "$mode" != pane ] && [ -n "$root" ]; then
+    fetch_bundle
     review
   fi
   return "$rc"
 }
 
-# OSC 7 with the VM's host name tells WezTerm the pane works in the VM,
-# which the status line marks and splits follow. tmux takes no host from
-# OSC 7, so the pane carries an option instead, which the window formats
-# in theme.conf mark and the cleanup removes.
+# OSC 7 with the VM's name tells WezTerm the pane works in the VM, which
+# the status line marks and splits follow. tmux takes no host from OSC 7,
+# so the pane carries an option instead, which the window formats in
+# theme.conf mark and the cleanup removes.
 mark_pane() {
   if [ -t 1 ]; then
-    printf '\e]7;file://%s%s\e\\' "$HOST" "$workdir"
+    printf '\e]7;file://%s%s\e\\' "$name" "$workdir"
   fi
   if [ -n "${TMUX_PANE:-}" ]; then
     tmux set -p -t "$TMUX_PANE" @agentvm 1
@@ -205,32 +268,180 @@ mark_pane() {
 }
 
 cleanup() {
-  kill ${pids[@]+"${pids[@]}"} 2>/dev/null || :
+  [ -z "${starting:-}" ] || stop_vm
   stop_status
   [ -z "${TMUX_PANE:-}" ] || tmux set -pu -t "$TMUX_PANE" @agentvm 2>/dev/null || :
   rm -rf "$session"
 }
 
-# Runs the guest session in a VM with $1 as its mode and the rest as its
-# arguments, and leaves the copy's changes as $session/vm.bundle, with
-# their base commit in $session/base.
+# Starts the VM unless it runs, and lets a start another process began
+# finish first. The run directory is the lock: whoever creates it
+# starts. A run directory without a live starter and a VM is left from a
+# crash or a reboot, and goes.
+ensure_vm() {
+  local starter
+  for _ in $(seq 600); do
+    if vm_running; then
+      ensure_profiles
+      return
+    fi
+    if mkdir -m 700 "$run" 2>/dev/null; then
+      echo $$ >"$run/starter"
+      start_vm
+      return
+    fi
+    starter=$(cat "$run/starter" 2>/dev/null || :)
+    if [ -n "$starter" ] && ! kill -0 "$starter" 2>/dev/null; then
+      clear_run
+      continue
+    fi
+    sleep 0.1
+  done
+  die "another agentvm is still starting the VM, see $run"
+}
+
+vm_running() {
+  container list --quiet 2>/dev/null | grep -qx "$name"
+}
+
+# Starts the proxy, its bridge, and the VM, detached from this session.
 #
-# The guest writes to the directory it shares with the host, so each VM
-# gets a new one inside the private $session. Nothing an earlier VM left
-# there, such as a link, can redirect the host's next write or read.
-guest() {
-  local exchange path var rc=0 opts=()
-  exchange=$(mktemp -d "$session/vm.XXXXXX")
-  opts+=(--mount "type=bind,source=$exchange,target=$GUEST_DIR/session")
+# The guest writes to the exchange directory it shares with the host, so
+# the VM gets a new one. Nothing an earlier VM left there, such as a
+# link, can redirect the host's write of the proxy password.
+start_vm() {
+  local path port opts=()
+  starting=1
+  check_image
+  ensure_ca
+  mkdir -p "$CLIPBOARD" "$run/exchange"
+  (umask 077 && "$OPENSSL" rand -hex 16 >"$run/pass" && printf 'nono:%s' "$(cat "$run/pass")" >"$run/exchange/proxy")
+  echo "$name" >"$run/name"
+  echo "${root:-no repository}" >"$run/root"
+  printf '%s\n' ${profiles[@]+"${profiles[@]}"} | sort -u >"$run/profiles"
+  start_proxy 0 "$run/profiles"
+  start_bridge
+
+  opts+=(--mount "type=bind,source=$run/exchange,target=$GUEST_DIR/session")
+  opts+=(--mount "type=bind,source=$(guest_dir),target=$GUEST_DIR/guest,readonly")
   opts+=(--mount "type=bind,source=$CLIPBOARD,target=$CLIPBOARD,readonly")
   for path in "${CACHES[@]}" ${persist[@]+"${persist[@]}"}; do
     mkdir -p "$folder/home/$path"
     opts+=(--mount "type=bind,source=$folder/home/$path,target=$GUEST_HOME/$path")
   done
+  for path in ${mounts[@]+"${mounts[@]}"}; do
+    opts+=(--mount "$(share "$path")")
+  done
+  for port in ${ports[@]+"${ports[@]}"}; do
+    opts+=(--publish-socket "$run/ports/$port:$GUEST_PORTS/$port")
+  done
   if [ -n "$root" ]; then
+    mkdir -p "$folder/copy"
     opts+=(--mount "type=bind,source=$folder/copy,target=$root")
     opts+=(--mount "type=bind,source=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir),target=$GUEST_DIR/git,readonly")
   fi
+
+  # Linux refuses a nested /proc mount, which podman in the VM needs, while
+  # parts of /proc are masked. The masks guard a kernel shared with the
+  # host, and the VM's kernel is its own.
+  mkdir -p "$run/ports"
+  container run --detach --network none --progress none \
+    --masked-path NONE --read-only-path NONE \
+    --name "$name" --uid "$(id -u)" --gid "$(id -g)" --cpus "$cpus" --memory "$memory" \
+    "${opts[@]}" --volume "$run/proxy.sock:$GUEST_DIR/proxy.sock" \
+    "${guest_env[@]}" --env "AGENTVM_PORTS=${ports[*]-}" \
+    "$IMAGE" bash "$GUEST_SESSION" serve >/dev/null
+  # A VM that dies right away, as on a guest error, keeps its log, since
+  # stop removes the container rather than --rm.
+  sleep 0.5
+  vm_running || die "the VM stopped right after its start: $(container logs "$name" 2>&1 | tail -n 5)"
+  for port in ${ports[@]+"${ports[@]}"}; do
+    detach socat "TCP-LISTEN:$port,bind=127.0.0.1,fork,reuseaddr" "UNIX-CONNECT:$run/ports/$port"
+  done
+  starting=
+}
+
+# The directory that holds the guest script itself. setup/link links one
+# file at a time, so guest/ under ~ is a directory of links into the
+# dotfiles, whose path in the VM is the repository copy when the dotfiles
+# are the repository. The link's target avoids the copy's script.
+guest_dir() {
+  local script
+  script=$(readlink -f "$LIBEXEC/guest/session.sh")
+  printf '%s' "${script%/*}"
+}
+
+check_image() {
+  local error
+  error=$(container image inspect "$IMAGE" 2>&1 >/dev/null) ||
+    die "no usable image, which agents vm build builds: $error"
+}
+
+# The mount option for the host path $1, with :ro for a read-only share.
+share() {
+  local path=${1%:ro} readonly=
+  [ "$path" = "$1" ] || readonly=,readonly
+  [ -e "$path" ] || die "$path does not exist"
+  printf 'type=bind,source=%s,target=%s%s' "$path" "$path" "$readonly"
+}
+
+# Stops the VM and what served it.
+stop_vm() {
+  if vm_running; then
+    container stop "$name" >/dev/null
+  fi
+  clear_run
+}
+
+# Removes the VM's runtime and the stopped container, whose name the
+# next start takes.
+clear_run() {
+  local pid
+  for pid in $(cat "$run/proxy.pid" "$run/pids" 2>/dev/null); do
+    kill "$pid" 2>/dev/null || :
+  done
+  rm -rf "$run"
+  container rm "$name" >/dev/null 2>&1 || :
+}
+
+# Stops every VM, including one an older agentvm left, and frees what
+# `container` keeps: the stopped containers, the builder with its layer
+# cache, and the images nothing names. The copies stay, since they hold
+# kept changes and the caches. The next build runs in full.
+prune() {
+  local dir id
+  for dir in "$STATE"/copies/*/run "$STATE/shell/run"; do
+    [ -f "$dir/name" ] || continue
+    run=$dir
+    name=$(cat "$dir/name")
+    stop_vm
+  done
+  for id in $(container list --all --quiet | grep "^$HOST-" || :); do
+    container stop "$id" >/dev/null 2>&1 || :
+    container rm "$id" >/dev/null 2>&1 || :
+  done
+  container builder delete --force >/dev/null 2>&1 || :
+  container image prune >/dev/null 2>&1 || :
+  container system df
+}
+
+# Prints each VM with its state and repository.
+list_vms() {
+  local running dir name state
+  running=$(container list --quiet 2>/dev/null || :)
+  for dir in "$STATE"/copies/*/run "$STATE/shell/run"; do
+    [ -f "$dir/name" ] || continue
+    name=$(cat "$dir/name")
+    state=stopped
+    ! grep -qx "$name" <<<"$running" || state=running
+    printf '%s\t%s\t%s\n' "$name" "$state" "$(cat "$dir/root")"
+  done
+}
+
+# Runs the guest session in the VM with $1 as its mode and the rest as
+# its arguments.
+guest() {
+  local var opts=()
   [ ! -t 0 ] || opts+=(--tty)
   # container sets TERM=xterm otherwise, and nvim then scrolls a split with
   # left and right margins, which tmux ignores, so the scroll smears the
@@ -238,88 +449,113 @@ guest() {
   for var in TERM COLORTERM; do
     [ -z "${!var:-}" ] || opts+=(--env "$var=${!var}")
   done
-
-  (umask 077 && printf 'nono:%s' "$proxy_pass" >"$exchange/proxy")
-  start_status "$exchange"
-  # Linux refuses a nested /proc mount, which podman in the VM needs, while
-  # parts of /proc are masked. The masks guard a kernel shared with the
-  # host, and the VM's kernel is its own.
-  container run --rm --interactive --network none --progress none \
-    --masked-path NONE --read-only-path NONE \
-    --name "$HOST-$$-$RANDOM" --uid "$(id -u)" --gid "$(id -g)" --cpus "$CPUS" --memory "$MEMORY" \
-    "${opts[@]}" ${env[@]+"${env[@]}"} --volume "$session/proxy.sock:$GUEST_DIR/proxy.sock" \
-    --env "HOME=$GUEST_HOME" --env "USER=$USER" \
-    --env "AGENTVM_ROOT=$root" --env "AGENTVM_WORKDIR=$workdir" \
-    --env "AGENTVM_SNAPSHOT=${snap:-}" \
-    --env "AGENTVM_NAME=$(git config user.name || echo "$USER")" \
-    --env "AGENTVM_EMAIL=$(git config user.email || echo "$USER@localhost")" \
-    "$IMAGE" bash /usr/local/libexec/agentvm/session.sh "$@" || rc=$?
-  stop_status
-  hand_back "$exchange"
-  return "$rc"
+  container exec --interactive "${opts[@]}" ${env[@]+"${env[@]}"} \
+    --uid "$(id -u)" --gid "$(id -g)" "${guest_env[@]}" \
+    --env "AGENTVM_WORKDIR=$workdir" --env "AGENTVM_SNAPSHOT=${snap:-}" \
+    --env "AGENTVM_STATUS_ID=${session##*/}" \
+    "$name" bash "$GUEST_SESSION" "$@"
 }
 
-# Copies the bundle and its base out of the exchange directory $1 into
-# $session. The VM has stopped, so the files can't change between the
-# check and the copy.
-hand_back() {
-  local file
-  for file in vm.bundle base; do
-    rm -f "${session:?}/$file"
-    if [ -f "$1/$file" ] && [ ! -L "$1/$file" ]; then
-      cp "$1/$file" "$session/$file"
-    fi
-  done
+# Takes the copy's changes from the guest as $session/vm.bundle, with
+# their base commit in $session/base. They come through the guest's
+# stdout, the base on the first line, so no file the guest left in a
+# shared directory can redirect the read.
+fetch_bundle() {
+  local handoff="$session/handoff" base=
+  guest bundle </dev/null >"$handoff"
+  IFS= read -r base <"$handoff" || :
+  printf '%s' "$base" >"$session/base"
+  tail -n +2 "$handoff" >"$session/vm.bundle"
 }
 
-# Starts this session's nono proxy on the host's loopback, and a bridge to
-# it from the Unix socket $1, and sets $proxy_pass. The proxy listens on
-# TCP, and `container` relays only Unix sockets into the VM, with the host
-# socket's mode. The socket sits in the private $session, so the mode lets
-# no other host user in. The cleanup stops both, which bash would
-# otherwise report.
+# Starts this VM's nono proxy on the host's loopback, on port $1 or an
+# OS-assigned one for 0, with the profiles listed in file $2, and records
+# the port in run/port. A later start on the same port keeps the bridge's
+# target, so new profiles join without a VM restart.
 start_proxy() {
-  local log port pid
-  log=$(mktemp "$session/proxy-log.XXXXXX")
-  proxy_pass=$("$OPENSSL" rand -hex 16)
-  NONO_PROXY_PASS=$proxy_pass nono proxy -p agentvm ${extends[@]+"${extends[@]}"} \
-    --proxy-ca-cert "$CA_CERT" --proxy-ca-key "$CA_KEY" </dev/null >"$log" 2>&1 &
+  local log="$run/proxy.log" extends=() profile seen pid port
+  for profile in $(cat "$2"); do
+    extends+=(--extends "$profile")
+  done
+  seen=$(listens "$log")
+  NONO_PROXY_PASS=$(cat "$run/pass") detach nono proxy -p agentvm ${extends[@]+"${extends[@]}"} \
+    --port "$1" --proxy-ca-cert "$CA_CERT" --proxy-ca-key "$CA_KEY"
   pid=$!
-  pids+=("$pid")
-  disown
+  echo "$pid" >"$run/proxy.pid"
   # The keychain may ask for access first.
-  until port=$(sed -n 's/.*listening on 127\.0\.0\.1:\([0-9]*\).*/\1/p' "$log") && [ -n "$port" ]; do
+  until [ "$(listens "$log")" -gt "$seen" ]; do
     kill -0 "$pid" 2>/dev/null || die "the proxy did not start: $(cat "$log")"
     sleep 0.2
   done
-  rm "$log"
+  port=$(sed -n 's/.*listening on 127\.0\.0\.1:\([0-9]*\).*/\1/p' "$log" | tail -n 1)
+  echo "$port" >"$run/port"
+}
 
-  socat "UNIX-LISTEN:$1,fork,mode=0666" "TCP:127.0.0.1:$port" 2>/dev/null &
+# Prints how often the proxy log $1 reports a listening proxy.
+listens() {
+  local count
+  count=$(grep -c 'listening on' "$1" 2>/dev/null || :)
+  echo "${count:-0}"
+}
+
+# Bridges the Unix socket run/proxy.sock to the proxy's port. The proxy
+# listens on TCP, and `container` relays only Unix sockets into the VM,
+# with the host socket's mode. The socket sits in the private run
+# directory, so the mode lets no other host user in.
+start_bridge() {
+  local pid
+  detach socat "UNIX-LISTEN:$run/proxy.sock,fork,mode=0666" "TCP:127.0.0.1:$(cat "$run/port")"
   pid=$!
-  pids+=("$pid")
-  disown
-  until [ -e "$1" ]; do
+  until [ -e "$run/proxy.sock" ]; do
     kill -0 "$pid" 2>/dev/null || die "the proxy bridge did not start"
     sleep 0.05
   done
+}
+
+# Restarts the proxy when this session stacks profiles the VM's proxy
+# lacks. Profiles only join, so every session keeps what it had. The old
+# proxy holds the port until it exits, and run/profiles changes only
+# once the new proxy listens, so a failed restart reruns next session.
+ensure_profiles() {
+  local union old
+  [ -f "$run/profiles" ] || return 0
+  union=$(printf '%s\n' ${profiles[@]+"${profiles[@]}"} | cat - "$run/profiles" | sort -u)
+  [ "$union" != "$(cat "$run/profiles")" ] || return 0
+  printf '%s\n' "$union" >"$run/profiles.next"
+  old=$(cat "$run/proxy.pid")
+  kill "$old" 2>/dev/null || :
+  while kill -0 "$old" 2>/dev/null; do
+    sleep 0.05
+  done
+  start_proxy "$(cat "$run/port")" "$run/profiles.next"
+  mv "$run/profiles.next" "$run/profiles"
+}
+
+# Runs "$@" past this session's life, with its output in run/proxy.log
+# and its pid in $! and run/pids. nohup keeps the terminal's hangup from
+# it, and disown keeps bash from reporting its end.
+detach() {
+  nohup "$@" </dev/null >>"$run/proxy.log" 2>&1 &
+  echo $! >>"$run/pids"
+  disown
 }
 
 # Creates the proxy's CA once. The image trusts it, so a new CA needs
 # `agentvm build`.
 ensure_ca() {
   [ ! -s "$CA_CERT" ] || return 0
-  mkdir -p "$STATE"
   (umask 077 && "$OPENSSL" req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
     -keyout "$CA_KEY" -out "$CA_CERT" -days 3650 -subj "/CN=agentvm proxy" \
     -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign 2>/dev/null)
 }
 
-# Passes the guest's status files in the exchange directory $1 to
-# $on_status while the VM runs. bash reports the sleep that stop_status
+# Passes the guest's status files to $on_status while the session runs.
+# Every session in the VM writes the same names, so each gets its own
+# folder, named after $session. bash reports the sleep that stop_status
 # ends.
 start_status() {
   [ -n "$on_status" ] || return 0
-  watch_status "$1" 2>/dev/null &
+  watch_status "$run/exchange/status/${session##*/}" 2>/dev/null &
   status_pid=$!
   disown
 }
@@ -334,11 +570,11 @@ stop_status() {
   "$on_status"
 }
 
-# Passes the changes in the exchange directory $1's status folder to
-# $on_status once a second, as NAME VALUE, with an empty VALUE for a file
-# that went. The last values sit in the private $session.
+# Passes the changes in the status folder $1 to $on_status once a
+# second, as NAME VALUE, with an empty VALUE for a file that went. The
+# last values sit in the private $session.
 watch_status() {
-  local dir="$1/status" seen="$session/status" file name value count
+  local dir="$1" seen="$session/status" file name value count
   mkdir -p "$seen"
   while sleep 1; do
     count=0
@@ -396,9 +632,9 @@ review() {
       cp "$patch" "$STATE/rejected.patch"
       die "the patch does not apply, see $STATE/rejected.patch"
     fi
-    guest reset
+    guest reset </dev/null
     ;;
-  d*) guest reset ;;
+  d*) guest reset </dev/null ;;
   esac
 }
 
@@ -440,11 +676,12 @@ visible() {
 }
 
 # Commits the working tree of the repository in $PWD through a temporary
-# index, so its index and history stay untouched. A repository without
-# commits gets a root commit.
+# index, so its index and history stay untouched, and prints the commit.
+# A repository without commits gets a root commit. The ref keeps the
+# commit from git's pruning, which a kept copy may need weeks later.
 snapshot() {
-  local tree dir parent=()
-  dir=$(mktemp -d)
+  local tree dir commit parent=()
+  dir=$(mktemp -d "$STATE/index.XXXXXX")
   cp "$(git rev-parse --git-path index)" "$dir/index" 2>/dev/null || :
   GIT_INDEX_FILE="$dir/index" git add -A :/
   tree=$(GIT_INDEX_FILE="$dir/index" git write-tree)
@@ -452,7 +689,9 @@ snapshot() {
   if git rev-parse -q --verify HEAD >/dev/null; then
     parent=(-p HEAD)
   fi
-  git commit-tree --no-gpg-sign ${parent[@]+"${parent[@]}"} -m "agentvm: host working tree" "$tree"
+  commit=$(git commit-tree --no-gpg-sign ${parent[@]+"${parent[@]}"} -m "agentvm: host working tree" "$tree")
+  git update-ref refs/agentvm/snapshot "$commit"
+  echo "$commit"
 }
 
 # Builds the image. The build runs downloaded install scripts, so its
@@ -460,35 +699,60 @@ snapshot() {
 # without ignored files, and never the CA's key, the repository copies,
 # or a host checkout.
 #
-# Afterward it frees what the build leaves behind. The builder keeps
-# every layer it built, tens of GB after a few builds, and the image it
-# replaced stays too. Neither helps the next build, which rebuilds the
-# whole image from a new snapshot. Both commands act on all of
-# `container`, which serves only agentvm here.
+# The builder keeps its layers, so a build after a dotfiles change redoes
+# the last layer only. The cached layer's package versions stand until
+# --fresh, which empties the builder first. The recipe's base goes into
+# its tar as a tree with a fixed time, so the same files give the same
+# bytes and the cache holds.
 build() {
-  local source=${DOTFILES_DIR:?} context rc=0
+  local source=${DOTFILES_DIR:?} context snap rc=0 started=$SECONDS rootfs=0 prepared image pruned outcome phases
   ensure_ca
-  [ -s "$DATA/alarm.tar.gz" ] || fetch_rootfs "$DATA/alarm.tar.gz"
-  context=$(mktemp -d)
+  if [ ! -s "$DATA/alarm.tar.gz" ]; then
+    fetch_rootfs "$DATA/alarm.tar.gz"
+    rootfs=$((SECONDS - started))
+  fi
+  context=$(mktemp -d "$STATE/build.XXXXXX")
   cp -c "$DATA/alarm.tar.gz" "$context/alarm.tar.gz"
   cp "$CA_CERT" "$context/ca.pem"
-  cp "$LIBEXEC/image/prepare.sh" "$LIBEXEC/guest/session.sh" "$context/"
-  git -C "$source" archive -o "$context/source.tar" "$(cd "$source" && snapshot)"
-  # The redrawn tty view flickers the cursor for the whole build.
-  container build --progress plain -f "$LIBEXEC/image/Containerfile" -t "$IMAGE" \
+  cp "$LIBEXEC/image/prepare.sh" "$context/"
+  snap=$(cd "$source" && snapshot)
+  git -C "$source" archive --mtime=1970-01-01T00:00:00Z -o "$context/base.tar" "$snap^{tree}" -- "${RECIPE_BASE[@]}"
+  git -C "$source" archive -o "$context/source.tar" "$snap"
+  if [ -n "$fresh" ]; then
+    container builder delete --force >/dev/null 2>&1 || :
+  fi
+  prepared=$((SECONDS - started - rootfs))
+  # The redrawn tty view flickers the cursor for the whole build. The
+  # builder gets the host's cores, since parser builds and the layer
+  # export bind on CPU.
+  container build --progress plain ${fresh:+--no-cache} \
+    --cpus "$(sysctl -n hw.ncpu)" --memory "$DEFAULT_MEMORY" \
+    -f "$LIBEXEC/image/Containerfile" -t "$IMAGE" \
     --build-arg GUEST_USER="$USER" --build-arg GUEST_UID="$(id -u)" \
-    --build-arg GUEST_GID="$(id -g)" --build-arg PROVISION="$PROVISION" "$context" || rc=$?
+    --build-arg GUEST_GID="$(id -g)" "$context" || rc=$?
+  image=$((SECONDS - started - rootfs - prepared))
   rm -r "$context"
-  container builder delete --force >/dev/null 2>&1 || :
   container image prune >/dev/null 2>&1 || :
+  pruned=$((SECONDS - started - rootfs - prepared - image))
+  # The phases, since the builder's own times stop at its steps.
+  outcome='done'
+  [ "$rc" -eq 0 ] || outcome=failed
+  phases="context $(clock "$prepared"), image $(clock "$image"), prune $(clock "$pruned")"
+  [ "$rootfs" -eq 0 ] || phases="rootfs $(clock "$rootfs"), $phases"
+  echo "agentvm: build $outcome in $(clock $((SECONDS - started))): $phases"
   return "$rc"
+}
+
+# Prints $1 seconds as minutes and seconds.
+clock() {
+  printf '%dm%02ds' $(($1 / 60)) $(($1 % 60))
 }
 
 # Downloads the Arch Linux ARM rootfs to $1, which only a tarball whose
 # signature checks out reaches.
 fetch_rootfs() {
   local gnupg
-  gnupg=$(mktemp -d)
+  gnupg=$(mktemp -d "$STATE/gnupg.XXXXXX")
   mkdir -p "${1%/*}"
   curl -fSL -o "$1.tmp" "$ALARM"
   curl -fSL -o "$1.sig" "$ALARM.sig"
@@ -507,9 +771,24 @@ die() {
   exit 1
 }
 
+# Prints the usage and exits with $1.
 usage() {
-  sed -n '/^#   agentvm/,/^#  *file, and CMD alone/s/^#   //p' "$0" >&2
-  exit 2
+  cat >&2 <<EOF
+Usage: agentvm [options] run -- CMD [ARGS...] | shell | pane DIR
+       agentvm take | drop | stop | ls | build [--fresh] | prune
+
+Options:
+  --extends PROFILE   stack a nono profile on the proxy (repeatable)
+  --env KEY=VALUE     set a variable in the session (repeatable)
+  --persist PATH      keep this path under the guest's home per repository
+  --mount PATH[:ro]   share this host path at the same path (repeatable)
+  --publish PORT      serve the guest's PORT on the host's loopback
+  --cpus N            the VM's CPUs, $DEFAULT_CPUS unless set
+  --memory SIZE       the VM's memory, $DEFAULT_MEMORY unless set
+  --on-status CMD     run CMD NAME VALUE on a status change, CMD alone at
+                      the session's end
+EOF
+  exit "$1"
 }
 
 # A test sources this script for its functions.
