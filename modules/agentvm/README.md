@@ -14,12 +14,7 @@ options. This page explains the design and the contract with callers.
 
 ```text
 .local/libexec/agentvm/
-  agentvm                          options and the session's flow
-  host/                            sourced by agentvm
-    common.sh                      paths, the proxy's CA, the snapshot
-    proxy.sh  vm.sh                the proxy and the VM
-    status.sh  review.sh           the status channel and the patch review
-    build.sh                       agentvm build
+  agentvm                          the host side: proxy, VM, status, review, build
   guest/session.sh                 runs in the VM around the command
   image/Containerfile, prepare.sh  the image build
 .config/nono/profiles/agentvm.json the hosts the VM reaches

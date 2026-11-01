@@ -277,6 +277,6 @@ fi
 # every control character in it turned into visible text, so none
 # reaches the terminal. Tabs, newlines, and UTF-8 text stay.
 visible=$(printf 'a\033[2Jb\r\302\233c\tok \303\274\n' |
-  bash -c '. "$1/host/review.sh"; visible' sh "$PWD/modules/agentvm/.local/libexec/agentvm")
+  bash -c '. "$1"; visible' sh "$script")
 [ "$visible" = "$(printf 'a^[[2Jb^M<U+009B>c\tok \303\274')" ] || fail "the review passed control characters: $visible"
 echo "agentvm ok"

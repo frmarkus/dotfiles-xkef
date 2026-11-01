@@ -47,8 +47,8 @@ Flag any change that lets a secret or a write reach an agent:
   widens read to write, or lets the agent write a file the host later runs.
 - A change in `modules/agentvm/` that widens what the VM reaches: a host in
   `.config/nono/profiles/agentvm.json`, a share in
-  `.local/libexec/agentvm/host/vm.sh`, or a host-side read or write of a path
-  the guest can write.
+  `.local/libexec/agentvm/agentvm`, or a host-side read or write of a path the
+  guest can write.
 - A token that reaches the sandbox through an exported variable such as
   `MISE_GITHUB_TOKEN`, a file stored in plain text, or a command line. The
   profile's `deny_vars` must strip every secret-looking variable, and tokens

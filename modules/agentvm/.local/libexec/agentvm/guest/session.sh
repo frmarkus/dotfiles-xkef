@@ -108,29 +108,24 @@ bundle)
   ;;
 esac
 
-if [ -z "${AGENTVM_ROOT:-}" ]; then
-  cd
-  hooks
-  rc=0
-  login "$@" || rc=$?
-  exit $rc
-fi
-
-repository
-git fetch -q "$dir/git" "+$AGENTVM_SNAPSHOT:$host_ref"
-
-# Replaces the copy while it holds nothing since the last copy.
-if [ -z "$(git status --porcelain)" ] &&
-  [ "$(git rev-parse -q --verify HEAD)" = "$(git rev-parse -q --verify $base_ref)" ]; then
-  git reset -q --hard $host_ref
-  git update-ref $base_ref $host_ref
+if [ -n "${AGENTVM_ROOT:-}" ]; then
+  repository
+  git fetch -q "$dir/git" "+$AGENTVM_SNAPSHOT:$host_ref"
+  # Replaces the copy while it holds nothing since the last copy.
+  if [ -z "$(git status --porcelain)" ] &&
+    [ "$(git rev-parse -q --verify HEAD)" = "$(git rev-parse -q --verify $base_ref)" ]; then
+    git reset -q --hard $host_ref
+    git update-ref $base_ref $host_ref
+  else
+    echo "agentvm: the VM copy keeps changes from an earlier session: agents vm take shows them and asks, drop discards them" >&2
+  fi
+  cd "$AGENTVM_WORKDIR"
 else
-  echo "agentvm: the VM copy keeps changes from an earlier session: agents vm take shows them and asks, drop discards them" >&2
+  cd
 fi
-cd "$AGENTVM_WORKDIR"
 hooks
 
 rc=0
 login "$@" || rc=$?
-handoff
+[ -z "${AGENTVM_ROOT:-}" ] || handoff
 exit $rc
