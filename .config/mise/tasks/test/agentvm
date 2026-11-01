@@ -464,4 +464,9 @@ grep -q "^container builder delete" "$ARGV_LOG" && grep -q "^container image pru
 visible=$(printf 'a\033[2Jb\r\302\233c\tok \303\274\n' |
   bash -c '. "$1"; visible' sh "$script")
 [ "$visible" = "$(printf 'a^[[2Jb^M<U+009B>c\tok \303\274')" ] || fail "the review passed control characters: $visible"
+
+# The prompt in the VM shows the shield that WezTerm puts on VM panes.
+mark=$(sed -n 's/^M\.MARK = "\(.*\)"$/\1/p' modules/wezterm/.config/wezterm/agentvm.lua)
+[ -n "$mark" ] && sed -n '/^\[custom\.agentvm\]/,/^format/p' modules/core/.config/starship.toml | grep -qxF "symbol = '$mark '" ||
+  fail "the VM's prompt lacks WezTerm's shield"
 echo "agentvm ok"

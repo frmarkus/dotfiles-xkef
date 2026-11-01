@@ -84,7 +84,7 @@ renamed = '[»${count}](yellow) '
 [custom.agentvm]
 when = 'test -e /etc/agentvm'
 shell = ['sh']
-symbol = ' '
+symbol = ' '
 style = 'bold yellow'
 format = '[$symbol]($style)'
 
