@@ -143,6 +143,20 @@ echo a >"$repo/a"
 grep -q "^tmux set -p -t %9 @agentvm 1" "$ARGV_LOG" || fail "the tmux pane was not marked"
 grep -q "^tmux set -pu -t %9 @agentvm" "$ARGV_LOG" || fail "the tmux mark stayed"
 
+# A build prints plain progress, since the redrawn view flickers the cursor.
+: >"$ARGV_LOG"
+mkdir -p "$XDG_DATA_HOME/agentvm"
+echo rootfs >"$XDG_DATA_HOME/agentvm/alarm.tar.gz"
+"$script" build >/dev/null 2>&1 || fail "the build failed: $(cat "$ARGV_LOG")"
+grep -q -- "^container build .*--progress plain" "$ARGV_LOG" || fail "the build redraws its progress"
+
+# The guest's TERM is the host's, since container's default of xterm makes
+# nvim scroll splits with margins that tmux ignores.
+: >"$ARGV_LOG"
+(cd "$repo" && TERM=tmux-256color COLORTERM=truecolor "$script" shell </dev/null >/dev/null 2>&1) || :
+grep -q -- "--env TERM=tmux-256color " "$ARGV_LOG" || fail "the guest did not get the host's TERM"
+grep -q -- "--env COLORTERM=truecolor " "$ARGV_LOG" || fail "the guest did not get the host's COLORTERM"
+
 # The VM gets no network device, and the password reaches it through the
 # session directory, never an argument list.
 grep -q -- "--network none" "$ARGV_LOG" || fail "the session VM got a network device"

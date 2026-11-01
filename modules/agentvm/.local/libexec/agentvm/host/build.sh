@@ -48,7 +48,8 @@ build() {
   cp "$LIBEXEC/image/prepare.sh" "$LIBEXEC/guest/session.sh" "$context/"
   git -C "$source" archive -o "$context/source.tar" "$(cd "$source" && snapshot)"
   local rc=0
-  container build -f "$LIBEXEC/image/Containerfile" -t "$IMAGE" \
+  # The redrawn tty view flickers the cursor for the whole build.
+  container build --progress plain -f "$LIBEXEC/image/Containerfile" -t "$IMAGE" \
     --build-arg GUEST_USER="$USER" --build-arg GUEST_UID="$(id -u)" \
     --build-arg GUEST_GID="$(id -g)" --build-arg PROVISION="$PROVISION" "$context" || rc=$?
   rm -r "$context"

@@ -42,6 +42,12 @@ guest() {
     args+=(--env "$share")
   done
   [ ! -t 0 ] || args+=(--tty)
+  # container sets TERM=xterm otherwise, and nvim then scrolls a split with
+  # left and right margins, which tmux ignores, so the scroll smears the
+  # neighboring windows.
+  for share in TERM COLORTERM; do
+    [ -z "${!share:-}" ] || args+=(--env "$share=${!share}")
+  done
 
   start_bridge "$session/proxy.sock"
   (umask 077 && printf 'nono:%s' "$proxy_pass" >"$exchange/proxy")
