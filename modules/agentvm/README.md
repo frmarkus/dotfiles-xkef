@@ -145,7 +145,8 @@ scripts, the package list, or the CA change. The last layer runs the recipe's
 [`setup/agentvm/provision`](../../setup/agentvm/provision) on the dotfiles'
 tree, which installs the dotfiles and the editor's plugins, so a build after a
 dotfiles change redoes that layer only. `agents vm build --fresh` empties the
-builder and rebuilds both, which also brings the packages up to date.
+builder and rebuilds both, which also brings the packages up to date. Each build
+stops the builder at its end, and the cache stays.
 
 `agents vm prune` stops every VM and frees the stopped containers, the builder
 with its cache, and the images nothing names. The copies stay.

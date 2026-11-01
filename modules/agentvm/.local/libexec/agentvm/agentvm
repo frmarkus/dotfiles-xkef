@@ -732,6 +732,9 @@ build() {
     --build-arg GUEST_GID="$(id -g)" "$context" || rc=$?
   image=$((SECONDS - started - rootfs - prepared))
   rm -r "$context"
+  # A stopped builder holds no CPUs or memory, and its cache stays for the
+  # next build.
+  container builder stop >/dev/null 2>&1 || echo "agentvm: the builder still runs, see container builder status" >&2
   container image prune >/dev/null 2>&1 || :
   pruned=$((SECONDS - started - rootfs - prepared - image))
   # The phases, since the builder's own times stop at its steps.

@@ -300,15 +300,16 @@ grep -q "^container run" "$ARGV_LOG" || fail "a lost VM did not start anew"
 [ "$(cat "$victim")" = untouched ] || fail "the host wrote through a link the guest left"
 
 # A build prints plain progress, since the redrawn view flickers the
-# cursor, gets the host's cores, keeps the builder's cache, and gives the
-# context the recipe's base apart from the whole tree. --fresh empties the
-# builder and skips the cache.
+# cursor, gets the host's cores, keeps the builder's cache but stops the
+# builder, and gives the context the recipe's base apart from the whole
+# tree. --fresh empties the builder and skips the cache.
 : >"$ARGV_LOG"
 mkdir -p "$XDG_DATA_HOME/agentvm"
 echo rootfs >"$XDG_DATA_HOME/agentvm/alarm.tar.gz"
 "$script" build >/dev/null 2>&1 || fail "the build failed: $(cat "$ARGV_LOG")"
 grep -q -- "^container build --progress plain --cpus 8 " "$ARGV_LOG" || fail "the build redraws its progress or runs on 2 cores"
 ! grep -q "^container builder delete" "$ARGV_LOG" || fail "the build threw the layer cache away"
+grep -q "^container builder stop" "$ARGV_LOG" || fail "the build left the builder running"
 grep -qx base.tar "$CONTEXT_LOG" && grep -qx source.tar "$CONTEXT_LOG" || fail "the context lacks the recipe: $(cat "$CONTEXT_LOG")"
 : >"$ARGV_LOG"
 "$script" build --fresh >/dev/null 2>&1 || fail "the fresh build failed"
