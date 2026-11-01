@@ -342,6 +342,9 @@ review() {
   git apply --stat --summary "$patch"
   git apply --numstat "$patch" | awk -F'\t' '$1 == "-" { print "binary: " $3 }'
   echo "agentvm: the VM's commits are agentvm/vm, in jj vm@agentvm"
+  # stdin can come back from the VM or the pager non-blocking, and read
+  # then fails with EAGAIN instead of waiting for the answer.
+  perl -MFcntl -e 'fcntl(STDIN, F_SETFL, fcntl(STDIN, F_GETFL, 0) & ~O_NONBLOCK)' || :
   read -rp "Take, drop, or keep the VM changes? [t/d/K] " answer || answer=k
   case "$answer" in
   t*)

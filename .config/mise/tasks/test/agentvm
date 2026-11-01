@@ -21,6 +21,8 @@ cat >"$tmp/bin/container" <<'EOF'
 #!/bin/sh
 echo "container $*" >>"$ARGV_LOG"
 [ "$1" = run ] || exit 0
+# container leaves the terminal it shares non-blocking.
+[ -z "${NONBLOCK:-}" ] || perl -MFcntl -e 'fcntl(STDIN, F_SETFL, fcntl(STDIN, F_GETFL, 0) | O_NONBLOCK) or die'
 while [ $# -gt 0 ]; do
   case $1 in
   --mount)
@@ -188,6 +190,12 @@ echo untouched >"$victim"
 [ "$(cat "$repo/pwned" 2>/dev/null)" = pwned ] || fail "take did not apply the VM's changes"
 [ "$(cat "$victim")" = untouched ] || fail "the host wrote through a link the guest left"
 git -C "$repo" rev-parse -q --verify refs/remotes/agentvm/vm >/dev/null || fail "the VM's commits are not agentvm/vm"
+rm "$repo/pwned"
+
+# The review waits for an answer that comes late, even after the VM left
+# stdin non-blocking.
+(cd "$repo" && { sleep 2 && echo t; } | CHANGE=1 NONBLOCK=1 "$script" shell >/dev/null 2>&1) || :
+[ "$(cat "$repo/pwned" 2>/dev/null)" = pwned ] || fail "the review read no answer from a non-blocking stdin"
 rm "$repo/pwned"
 
 # A bundle the guest planted as a link, or one that builds on a commit the
