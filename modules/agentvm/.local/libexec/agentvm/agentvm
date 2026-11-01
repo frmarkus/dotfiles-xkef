@@ -150,37 +150,34 @@ build() {
   return "$rc"
 }
 
-# Starts this session's nono proxy on the host's loopback, which stops
-# when the script exits, and sets $proxy_port and $proxy_pass.
+# Starts this session's nono proxy on the host's loopback, and a bridge to
+# it from the Unix socket $1, and sets $proxy_pass. The proxy listens on
+# TCP, and `container` relays only Unix sockets into the VM, with the host
+# socket's mode. The socket sits in the private $session, so the mode lets
+# no other host user in. The cleanup stops both, which bash would
+# otherwise report.
 start_proxy() {
-  local log
+  local log port pid
   log=$(mktemp "$session/proxy-log.XXXXXX")
   proxy_pass=$("$OPENSSL" rand -hex 16)
   NONO_PROXY_PASS=$proxy_pass nono proxy -p agentvm ${extends[@]+"${extends[@]}"} \
     --proxy-ca-cert "$CA_CERT" --proxy-ca-key "$CA_KEY" </dev/null >"$log" 2>&1 &
-  proxy_pid=$!
-  # The cleanup stops the proxy, which bash would otherwise report.
+  pid=$!
+  pids+=("$pid")
   disown
-
   # The keychain may ask for access first.
-  until proxy_port=$(sed -n 's/.*listening on 127\.0\.0\.1:\([0-9]*\).*/\1/p' "$log") && [ -n "$proxy_port" ]; do
-    kill -0 "$proxy_pid" 2>/dev/null || die "the proxy did not start: $(cat "$log")"
+  until port=$(sed -n 's/.*listening on 127\.0\.0\.1:\([0-9]*\).*/\1/p' "$log") && [ -n "$port" ]; do
+    kill -0 "$pid" 2>/dev/null || die "the proxy did not start: $(cat "$log")"
     sleep 0.2
   done
   rm "$log"
-}
 
-# Starts a bridge from a Unix socket at $1 to the proxy and sets
-# $bridge_pid. The proxy listens on TCP, and `container` relays only Unix
-# sockets into the VM, with the host socket's mode. The socket sits in the
-# private $session, so the mode lets no other host user in.
-start_bridge() {
-  rm -f "$1"
-  socat "UNIX-LISTEN:$1,fork,mode=0666" "TCP:127.0.0.1:$proxy_port" 2>/dev/null &
-  bridge_pid=$!
+  socat "UNIX-LISTEN:$1,fork,mode=0666" "TCP:127.0.0.1:$port" 2>/dev/null &
+  pid=$!
+  pids+=("$pid")
   disown
   until [ -e "$1" ]; do
-    kill -0 "$bridge_pid" 2>/dev/null || die "the proxy bridge did not start"
+    kill -0 "$pid" 2>/dev/null || die "the proxy bridge did not start"
     sleep 0.05
   done
 }
@@ -257,7 +254,6 @@ guest() {
     [ -z "${!var:-}" ] || args+=(--env "$var=${!var}")
   done
 
-  start_bridge "$session/proxy.sock"
   (umask 077 && printf 'nono:%s' "$proxy_pass" >"$exchange/proxy")
   if [ -n "$on_status" ]; then
     # bash reports the sleep that stop_status ends.
@@ -279,7 +275,6 @@ guest() {
     --env "AGENTVM_EMAIL=$(git config user.email || echo "$USER@localhost")" \
     "$IMAGE" bash /usr/local/libexec/agentvm/session.sh "$@" || rc=$?
   stop_status
-  kill "$bridge_pid" 2>/dev/null || :
 
   # The VM has stopped, so the files can't change between the check and
   # the copy.
@@ -361,7 +356,7 @@ review() {
 }
 
 cleanup() {
-  [ -z "${proxy_pid:-}" ] || kill "$proxy_pid" 2>/dev/null || :
+  kill ${pids[@]+"${pids[@]}"} 2>/dev/null || :
   stop_status
   [ -z "${TMUX_PANE:-}" ] || tmux set -pu -t "$TMUX_PANE" @agentvm 2>/dev/null || :
   rm -rf "$session"
@@ -429,6 +424,7 @@ fi
 [ "$mode" != pane ] || workdir=$1
 
 session=$(umask 077 && mktemp -d "$STATE/session.XXXXXX")
+pids=()
 trap cleanup EXIT
 
 # The repository's folder, which the VM mounts parts of. Each sits
@@ -444,7 +440,7 @@ fi
 mkdir -p "$folder/copy" "$CLIPBOARD"
 
 ensure_ca
-start_proxy
+start_proxy "$session/proxy.sock"
 
 case "$mode" in
 take)
