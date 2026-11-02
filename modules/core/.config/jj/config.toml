@@ -6,7 +6,6 @@ merge-editor = "vimdiff"
 diff-instructions = false
 graph.style = "square"
 log-word-wrap = true
-show-cryptographic-signatures = true
 
 # Only fish exports NVIM_APPNAME, so each editor names the config.
 [ui.editor]
