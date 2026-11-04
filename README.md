@@ -39,7 +39,7 @@ The machine's state lives in `~/.local/state/dotfiles`, which the repo links as
 
 - `modules` selects the modules under `modules/`. A machine gets `core`,
   `desktop`, and `agents`, and the agent VM gets `core` and `agents`. The extras
-  `wezterm`, `helix`, `zed`, and `kickstart` go in by hand.
+  `wezterm`, `rex`, `helix`, `zed`, and `kickstart` go in by hand.
 - `links` lists every link the last run made, so a file removed from the repo
   loses its link.
 - `backup/` holds the files that stood where a link goes.
@@ -54,6 +54,7 @@ The machine's state lives in `~/.local/state/dotfiles`, which the repo links as
 | [Ghostty](https://ghostty.org)                                                     | Terminal that runs tmux, themed with the rest              |
 | [tmux](https://github.com/tmux/tmux) + [sesh](https://github.com/joshmedeski/sesh) | Multiplexer and sessions, with an agent picker             |
 | [WezTerm](https://wezterm.org)                                                     | Extra: terminal and multiplexer, on the tmux keys          |
+| [Rex](https://www.superlogical.com/rex)                                            | Extra: multiplexer app in beta, on the tmux keys           |
 | [television](https://github.com/alexpasmantier/television)                         | Fuzzy finder in the shell and the pickers                  |
 | [atuin](https://atuin.sh)                                                          | Searchable local shell history                             |
 | [Claude Code](https://claude.com/claude-code), [pi](https://pi.dev)                | AI coding agents, always launched in a nono sandbox        |

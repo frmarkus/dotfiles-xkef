@@ -14,7 +14,7 @@ selections=(
   'core wezterm'
   'core helix'
   'core desktop agents'
-  'core desktop agents wezterm helix zed kickstart'
+  'core desktop agents wezterm rex helix zed kickstart'
 )
 for selection in "${selections[@]}"; do
   run=$(mktemp -d "$tmp/run.XXXXXX")

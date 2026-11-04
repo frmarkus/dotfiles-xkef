@@ -35,6 +35,7 @@ set -l pipeline \
 #   agents     Claude Code, pi, and their nono sandbox
 #   agentvm    a sandbox VM for agents, on macOS
 #   wezterm    WezTerm, an alternative to Ghostty and tmux
+#   rex        Rex keys, for the Rex beta app installed by hand
 #   helix      Helix with its formatters and language servers
 #   zed        Zed
 #   kickstart  kickstart.nvim, a minimal Neovim config, run as knvim
