@@ -40,6 +40,7 @@ brew "rumdl"                # markdown linter and formatter (LazyVim, with a rum
 brew "dprint"               # formatter (LazyVim, with a dprint config)
 brew "podman"               # rootless container engine
 brew "docker-compose"       # compose provider for podman compose
+brew "docker"               # Docker CLI for podman's socket, no engine
 brew "skopeo"               # registry image inspection (imgarch)
 brew "lazydocker"           # terminal UI for Docker/Podman
 brew "fx"                   # terminal JSON viewer
