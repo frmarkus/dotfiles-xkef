@@ -1,6 +1,6 @@
 # ═══ [ui] ═══════════════════════════════════════════
 [ui]
-default-command = "log"
+default-command = "overview"
 conflict-marker-style = "git"
 merge-editor = "vimdiff"
 diff-instructions = false
@@ -57,6 +57,7 @@ diff-formatter = ":git"
 [colors]
 "diff removed token" = { reverse = true, underline = false }
 "diff added token" = { reverse = true, underline = false }
+"node elided" = "bright black"
 
 # ═══ [git] ══════════════════════════════════════════
 [git]
@@ -75,7 +76,7 @@ allowed-signers = "~/.config/git/allowed_signers"
 
 # ═══ [revsets] ══════════════════════════════════════
 [revsets]
-log = 'stack(mine() | @) | trunk()'
+log = 'stack(@) | trunk()'
 # `jj tug` targets the completed change under the empty working copy.
 bookmark-advance-to = '@-'
 
@@ -95,9 +96,21 @@ bookmark-advance-to = '@-'
 'format_short_signature(signature)' = '''
 stringify(signature.email()).replace(regex:'^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$', "$1")
 '''
+'format_timestamp(timestamp)' = 'timestamp.ago()'
 
 # ═══ [aliases] ══════════════════════════════════════
 [aliases]
+# The current workspace's stack, then the other workspaces. The
+# trailing "" fills $0.
+overview = [
+  "util",
+  "exec",
+  "--",
+  "sh",
+  "-c",
+  "jj log && jj workspace list -T 'if(!current_workspace, builtin_workspace_list)'",
+  "",
+]
 # Inspect
 examine = ["log", "-T", "builtin_log_detailed", "-p", "-r"]
 credit = ["file", "annotate"]
