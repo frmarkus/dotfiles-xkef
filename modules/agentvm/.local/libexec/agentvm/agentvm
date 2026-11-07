@@ -24,8 +24,8 @@
 #   --mount PATH[:ro]   share this host path at the same path (repeatable)
 #   --publish PORT      serve the guest's PORT on the host's loopback
 #                       (repeatable)
-#   --cpus N            the VM's CPUs, 4 unless set
-#   --memory SIZE       the VM's memory, 8G unless set
+#   --cpus N            the VM's CPUs, config.toml's unless set
+#   --memory SIZE       the VM's memory, config.toml's unless set
 #   --on-status CMD     run CMD NAME VALUE when the guest changes a status
 #                       file, and CMD alone when the session ends
 #
@@ -56,7 +56,6 @@ readonly CLIPBOARD="$HOME/.cache/agentvm-clipboard"
 readonly LOCAL_PROFILE=agentvm-local
 
 readonly IMAGE=agentvm:latest
-readonly DEFAULT_CPUS=4 DEFAULT_MEMORY=8G
 # The prefix of the VMs' names, which `container` makes their host
 # names. WezTerm reads the name from OSC 7.
 readonly HOST=agentvm
@@ -137,8 +136,7 @@ parse_args() {
   persist=()
   mounts=()
   ports=()
-  cpus=$DEFAULT_CPUS
-  memory=$DEFAULT_MEMORY
+  size=()
   on_status=
   fresh=
   [ ! -f "$HOME/.config/nono/profiles/$LOCAL_PROFILE.json" ] || profiles+=("$LOCAL_PROFILE")
@@ -149,8 +147,8 @@ parse_args() {
     --persist) persist+=("${2:?}") ;;
     --mount) mounts+=("${2:?}") ;;
     --publish) ports+=("${2:?}") ;;
-    --cpus) cpus=${2:?} ;;
-    --memory) memory=${2:?} ;;
+    --cpus) size+=(--cpus "${2:?}") ;;
+    --memory) size+=(--memory "${2:?}") ;;
     --on-status) on_status=${2:?} ;;
     -h | --help) usage 0 ;;
     *) break ;;
@@ -347,7 +345,7 @@ start_vm() {
   mkdir -p "$run/ports"
   container run --detach --network none --progress none \
     --masked-path NONE --read-only-path NONE \
-    --name "$name" --uid "$(id -u)" --gid "$(id -g)" --cpus "$cpus" --memory "$memory" \
+    --name "$name" --uid "$(id -u)" --gid "$(id -g)" ${size[@]+"${size[@]}"} \
     "${opts[@]}" --volume "$run/proxy.sock:$GUEST_DIR/proxy.sock" \
     "${guest_env[@]}" --env "AGENTVM_PORTS=${ports[*]-}" \
     "$IMAGE" bash "$GUEST_SESSION" serve >/dev/null
@@ -726,7 +724,7 @@ build() {
   # builder gets the host's cores, since parser builds and the layer
   # export bind on CPU.
   container build --progress plain ${fresh:+--no-cache} \
-    --cpus "$(sysctl -n hw.ncpu)" --memory "$DEFAULT_MEMORY" \
+    --cpus "$(sysctl -n hw.ncpu)" \
     -f "$LIBEXEC/image/Containerfile" -t "$IMAGE" \
     --build-arg GUEST_USER="$USER" --build-arg GUEST_UID="$(id -u)" \
     --build-arg GUEST_GID="$(id -g)" "$context" || rc=$?
@@ -786,8 +784,8 @@ Options:
   --persist PATH      keep this path under the guest's home per repository
   --mount PATH[:ro]   share this host path at the same path (repeatable)
   --publish PORT      serve the guest's PORT on the host's loopback
-  --cpus N            the VM's CPUs, $DEFAULT_CPUS unless set
-  --memory SIZE       the VM's memory, $DEFAULT_MEMORY unless set
+  --cpus N            the VM's CPUs, config.toml's unless set
+  --memory SIZE       the VM's memory, config.toml's unless set
   --on-status CMD     run CMD NAME VALUE on a status change, CMD alone at
                       the session's end
 EOF

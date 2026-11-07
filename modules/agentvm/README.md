@@ -164,3 +164,4 @@ never gets the key of the CA or the repository copies.
 | `~/.local/state/agentvm/copies/`      | one folder per repository       |
 | `~/.local/state/agentvm/copies/*/run` | a VM's proxy, bridge, and log   |
 | `container image list`                | the image, `agentvm:latest`     |
+| `~/.config/container/config.toml`     | the VM's and builder's size     |
