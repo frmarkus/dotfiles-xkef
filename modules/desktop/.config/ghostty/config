@@ -32,6 +32,8 @@ confirm-close-surface = false
 cursor-style = bar
 cursor-style-blink = false
 shell-integration-features = cursor,sudo,title,ssh-env
+# Smears the cursor along its jump, as Neovide's animated cursor does.
+custom-shader = ~/.config/ghostty/shaders/cursor_smear.glsl
 
 # ── Clipboard ────────────────────────────────────────
 clipboard-read = allow
