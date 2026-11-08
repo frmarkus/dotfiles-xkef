@@ -2,8 +2,7 @@
 .DS_Store
 
 # AI tooling
-/.claude/*
-!/.claude/skills/
+/.claude/
 /.claude-notes/
 
 # setup/apply links the machine's state here, and the agent VM's state
