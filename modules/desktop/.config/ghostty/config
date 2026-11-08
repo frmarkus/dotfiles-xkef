@@ -55,6 +55,10 @@ keybind = ctrl+shift+minus=decrease_font_size:1
 keybind = ctrl+shift+zero=reset_font_size
 keybind = ctrl+shift+f=toggle_fullscreen
 
+# macOS detects password prompts only in the shell Ghostty starts. Under
+# tmux it can't, so secure input needs a manual toggle.
+keybind = super+shift+s=toggle_secure_input
+
 # ── Quick terminal ─────────────────────────────────
 quick-terminal-size = 50%
 keybind = global:ctrl+grave_accent=toggle_quick_terminal
