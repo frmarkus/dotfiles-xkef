@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nolabs-ai/nono/main/crates/nono-cli/data/nono-profile.schema.json",
   "meta": {
-    "description": "Claude credentials for the agent VM's proxy, which agents vm stacks on agentvm",
+    "description": "Claude credentials for the credential proxy, which the claude profile extends and agents vm stacks on agentvm",
     "name": "agentvm-claude",
     "version": "1.0.0"
   },

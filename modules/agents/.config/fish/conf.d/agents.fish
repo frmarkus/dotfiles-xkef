@@ -30,7 +30,7 @@ function pi --wraps pi --description "pi.dev coding agent in a nono sandbox"
     if not command -q pi
         printf '  Installing pi...\n'
         # The version the extensions type-check against.
-        set -l pi_version (jq -r '.devDependencies["@earendil-works/pi-coding-agent"]' $DOTFILES_DIR/.config/pi/package.json)
+        set -l pi_version (jq -r '.devDependencies["@earendil-works/pi-coding-agent"]' $DOTFILES_DIR/.mise/pi/package.json)
         npm install -g @earendil-works/pi-coding-agent@$pi_version; or return
     end
 

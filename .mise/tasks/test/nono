@@ -51,7 +51,8 @@ fi
 # home that the profile doesn't set would point at the host's.
 homes=$(jq -r '.environment.set_vars // {} | to_entries[] | "\(.key)=\(.value)"' "$profiles/agents.json")
 home_vars=(CARGO_HOME RUSTUP_HOME GOPATH GOBIN GOCACHE UV_CACHE_DIR
-  UV_PYTHON_INSTALL_DIR UV_TOOL_DIR UV_TOOL_BIN_DIR npm_config_cache MAVEN_USER_HOME)
+  UV_PYTHON_INSTALL_DIR UV_TOOL_DIR UV_TOOL_BIN_DIR npm_config_cache MAVEN_USER_HOME
+  MISE_CACHE_DIR)
 home_paths=()
 for var in "${home_vars[@]}"; do
   value=$(printf '%s\n' "$homes" | sed -n "s/^$var=//p")
@@ -63,7 +64,8 @@ printf '%s\n' "$homes" | grep -q '^MAVEN_OPTS=.*-Dmaven\.repo\.local=' ||
 
 # nono skips a grant whose path doesn't exist, so every path exists before
 # the checks.
-mkdir -p "${host_paths[@]}" "${home_paths[@]}" "$HOME/.local/libexec/agents"
+mkdir -p "${host_paths[@]}" "${home_paths[@]}" "$HOME/.local/libexec/agents" \
+  "$XDG_CACHE_HOME/mise/exec" "$HOME/.agents"
 touch "$HOME/.m2/settings.xml"
 
 for path in "${host_paths[@]}"; do
@@ -73,9 +75,19 @@ for path in "${home_paths[@]}"; do
   [ "$(verdict write "$path")" = ALLOWED ] || fail "the agent may not write $path"
 done
 
-# jj and Maven still read their config, and the hooks run agent-state.
+# mise caches the output of a config's exec() templates, which may be a
+# token, in its exec cache.
+[ "$(verdict read "$XDG_CACHE_HOME/mise/exec")" = DENIED ] ||
+  fail "the agent may read mise's exec cache"
+
+# The agent reads the shared instructions and skills but can't rewrite
+# them for the next session.
+[ "$(verdict write "$HOME/.agents")" = DENIED ] || fail "the agent may write $HOME/.agents"
+
+# jj and Maven still read their config, the hooks run agent-state, and
+# the agent reads the shared instructions and skills.
 for path in "$XDG_CONFIG_HOME/jj/repos" "$HOME/.m2/settings.xml" \
-  "$HOME/.local/libexec/agents"; do
+  "$HOME/.local/libexec/agents" "$HOME/.agents"; do
   [ "$(verdict read "$path")" = ALLOWED ] || fail "the agent may not read $path"
 done
 

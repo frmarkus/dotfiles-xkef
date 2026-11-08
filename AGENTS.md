@@ -29,12 +29,10 @@ so this routes `gh`, `git`, and `jj git push` alike:
 A repo that another account holds can pin it for the whole directory through
 mise, as in this `mise.local.toml`:
 
-<!-- rumdl-disable MD013 -->
-
     [env]
-    GH_TOKEN = "{{ exec(command='gh auth token --user <account>', cache_key='gh-<account>', cache_duration='1d') }}"
+    GH_TOKEN = "{{ exec(command='gh auth token --user <account>') }}"
 
-<!-- rumdl-enable MD013 -->
+Leave out `cache_key`. With it, mise writes the token to its cache directory.
 
 Don't run `gh auth switch`. It misroutes concurrent sessions. A stray
 `GITHUB_TOKEN` in the environment pins plain `gh` to that account. `GH_TOKEN`

@@ -69,7 +69,7 @@ args=(
 while [ $# -gt 0 ]; do
   case $1 in
   --github)
-    args+=(--extends agents --env "GH_TOKEN=$PLACEHOLDER")
+    args+=(--extends github --env "GH_TOKEN=$PLACEHOLDER")
     shift
     ;;
   --publish)

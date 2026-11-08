@@ -14,12 +14,15 @@ complete -c agents -n __fish_use_subcommand -xa '(__agents_commands)'
 complete -c agents -n __fish_use_subcommand -xa help -d 'Show usage'
 complete -c agents -n '__fish_seen_subcommand_from skills trace' -a '(__agents_complete_tool)'
 
-set -l vm_commands claude shell take drop build help
+set -l vm_commands claude shell take drop stop ls build prune help
 set -l vm_first "__fish_seen_subcommand_from vm; and not __fish_seen_subcommand_from $vm_commands"
 complete -c agents -n $vm_first -a claude -d 'Claude Code in the VM'
 complete -c agents -n $vm_first -a shell -d 'fish in the VM'
 complete -c agents -n $vm_first -a take -d "Show the VM copy's changes, then apply or keep"
 complete -c agents -n $vm_first -a drop -d "Discard the VM copy's changes"
+complete -c agents -n $vm_first -a stop -d "Stop this repository's VM"
+complete -c agents -n $vm_first -a ls -d 'List the VMs'
 complete -c agents -n $vm_first -a build -d 'Rebuild the VM image'
+complete -c agents -n $vm_first -a prune -d 'Stop every VM and free the builder and unused images'
 complete -c agents -n $vm_first -a help -d 'Show the help'
 complete -c agents -n '__fish_seen_subcommand_from vm; and __fish_seen_subcommand_from claude shell' -l github -d 'Give the session GitHub through the proxy'

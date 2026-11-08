@@ -1,25 +1,5 @@
 {
   "$schema": "https://raw.githubusercontent.com/nolabs-ai/nono/main/crates/nono-cli/data/nono-profile.schema.json",
-  "credential_capture": {
-    "github": {
-      "command": [
-        "/bin/sh",
-        "-c",
-        "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; a=\"github-$(git config --get github.user || gh config get -h github.com user)\"; if command -v security >/dev/null; then security find-generic-password -s nono -a \"$a\" -w; else secret-tool lookup service nono account \"$a\"; fi"
-      ],
-      "cache_ttl_secs": 900,
-      "timeout_secs": 60
-    },
-    "github_git": {
-      "command": [
-        "/bin/sh",
-        "-c",
-        "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; printf 'x-access-token:%s' \"$(a=\"github-$(git config --get github.user || gh config get -h github.com user)\"; if command -v security >/dev/null; then security find-generic-password -s nono -a \"$a\" -w; else secret-tool lookup service nono account \"$a\"; fi)\""
-      ],
-      "cache_ttl_secs": 900,
-      "timeout_secs": 60
-    }
-  },
   "environment": {
     "case_insensitive_vars": true,
     "deny_vars": [
@@ -53,22 +33,25 @@
       "MAVEN_OPTS": "-Dmaven.repo.local=$XDG_CACHE_HOME/agents-sandbox/m2/repository",
       "GIT_CONFIG_COUNT": "1",
       "GIT_CONFIG_KEY_0": "credential.helper",
-      "GIT_CONFIG_VALUE_0": ""
+      "GIT_CONFIG_VALUE_0": "",
+      "MISE_CACHE_DIR": "$XDG_CACHE_HOME/agents-sandbox/mise"
     }
   },
-  "extends": "default",
+  "extends": [
+    "default",
+    "github"
+  ],
   "filesystem": {
     "allow": [
-      "$HOME/.agents",
       "$XDG_STATE_HOME/agents",
-      "$XDG_CACHE_HOME/agents-sandbox",
-      "$XDG_CACHE_HOME/mise"
+      "$XDG_CACHE_HOME/agents-sandbox"
     ],
     "bypass_protection": [
       "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock",
       "$HOME/.1password/agent.sock"
     ],
     "read": [
+      "$HOME/.agents",
       "$HOME/.local/libexec/agents",
       "$XDG_DATA_HOME/cargo/bin",
       "$XDG_DATA_HOME/mise",
@@ -95,27 +78,12 @@
     ]
   },
   "meta": {
-    "description": "Base of the claude and pi profiles: shared skills, agent state, the 1Password SSH agent for commit signing, and GitHub through the credential proxy. Toolchains, their caches, and the Maven repository live in a sandbox-only home, and jj's per-repository config stays read-only, since the host runs what both hold",
+    "description": "Base of the claude and pi profiles: shared skills, agent state, the 1Password SSH agent for commit signing, and GitHub through the github profile. Toolchains, their caches, mise's cache, and the Maven repository live in a sandbox-only home, and jj's per-repository config stays read-only, since the host runs what both hold",
     "name": "agents",
     "version": "2.0.0"
   },
   "network": {
-    "block": false,
-    "credentials": ["github", "github_git"],
-    "custom_credentials": {
-      "github": {
-        "upstream": "https://api.github.com",
-        "credential_key": "cmd://github",
-        "env_var": "GH_TOKEN",
-        "credential_format": "token {}"
-      },
-      "github_git": {
-        "upstream": "https://github.com",
-        "credential_key": "cmd://github_git",
-        "env_var": "GITHUB_GIT_TOKEN",
-        "inject_mode": "basic_auth"
-      }
-    }
+    "block": false
   },
   "workdir": {
     "access": "readwrite"
