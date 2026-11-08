@@ -28,30 +28,7 @@ local function jj_refresh()
 end
 
 return {
-  {
-    "akinsho/bufferline.nvim",
-    opts = function(_, opts)
-      opts.options = vim.tbl_deep_extend("force", opts.options or {}, {
-        themable = false,
-        style_preset = {
-          require("bufferline").style_preset.no_bold,
-        },
-        indicator = { icon = "", style = "none" },
-        separator_style = { "", "" },
-        offsets = {
-          { filetype = "neo-tree", text = "", separator = false },
-        },
-      })
-      local orig_hl = opts.highlights
-      opts.highlights = function(config)
-        local base = type(orig_hl) == "function" and orig_hl(config) or (orig_hl or {})
-        base.fill = vim.tbl_deep_extend("force", base.fill or {}, {
-          bg = { attribute = "bg", highlight = "NeoTreeNormal" },
-        })
-        return base
-      end
-    end,
-  },
+  { "akinsho/bufferline.nvim", enabled = false },
 
   {
     "nvim-lualine/lualine.nvim",
