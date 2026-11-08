@@ -16,7 +16,7 @@ pacman -Rns --noconfirm linux-aarch64 linux-firmware || :
 mapfile -t packages < <(sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$base/setup/packages/arch/sandbox.txt")
 pacman -S --noconfirm --needed "${packages[@]}"
 # Arch Linux ARM doesn't package mise, so it comes from upstream.
-curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh
+curl -fsSL https://mise.run | MISE_VERSION=v2026.11.4 MISE_INSTALL_PATH=/usr/local/bin/mise sh
 
 usermod -s /usr/bin/fish "$user"
 # Rootless podman maps the IDs in a container to these. The VM has no

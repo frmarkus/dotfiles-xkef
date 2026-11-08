@@ -59,7 +59,7 @@ jobs:
           persist-credentials: false
       - name: Bootstrap and verify
         env:
-          GITHUB_TOKEN: ${{ github.token }} # mise version lookups rate-limit without it
+          MISE_GITHUB_TOKEN: ${{ github.token }} # mise version lookups rate-limit without it
         run: .github/scripts/e2e
 
   e2e-arch:
@@ -76,5 +76,5 @@ jobs:
           persist-credentials: false
       - name: Bootstrap and verify
         env:
-          GITHUB_TOKEN: ${{ github.token }} # mise version lookups rate-limit without it
+          MISE_GITHUB_TOKEN: ${{ github.token }} # mise version lookups rate-limit without it
         run: .github/scripts/e2e

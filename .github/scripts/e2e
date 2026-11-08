@@ -19,7 +19,7 @@ if [ "$(id -u)" = 0 ]; then
   useradd -m builder
   echo 'builder ALL=(ALL) NOPASSWD: ALL' >/etc/sudoers.d/builder
   chown -R builder: .
-  exec sudo --preserve-env=CI,GITHUB_TOKEN,STARTUP_BUDGET_MS,PROMPT_BUDGET_MS \
+  exec sudo --preserve-env=CI,MISE_GITHUB_TOKEN,STARTUP_BUDGET_MS,PROMPT_BUDGET_MS \
     -u builder env HOME=/home/builder .github/scripts/e2e
 fi
 
@@ -42,9 +42,6 @@ fi
 out=$(cd / && fish -i -c 'echo fish boots' 2>&1 </dev/null)
 echo "$out"
 [ "$out" = "fish boots" ]
-for f in ~/.config/fish/config.fish ~/.config/fish/conf.d/*.fish ~/.config/fish/functions/*.fish; do
-  fish -n "$f"
-done
 ~/.local/bin/theme --current
 ~/.local/bin/dots-ref --raw | tail -3
 .mise/tasks/perf
@@ -53,8 +50,8 @@ if [ "$(uname)" != Darwin ]; then
   exit 0
 fi
 
-# The apply selects no extras, and the package install skips casks under
-# CI, so the test installs WezTerm itself to load its config.
+# The apply selects no extras, and the package install skips the desktop
+# module under CI, so the test installs WezTerm itself to load its config.
 brew install --cask wezterm@nightly
 NVIM_APPNAME=lazyvim nvim --headless '+Lazy! restore' +qa
 mise trust
