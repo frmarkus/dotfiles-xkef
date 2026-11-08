@@ -59,7 +59,7 @@ The machine's state lives in `~/.local/state/dotfiles`, which the repo links as
 | [atuin](https://atuin.sh)                                                          | Searchable local shell history                             |
 | [Claude Code](https://claude.com/claude-code), [pi](https://pi.dev)                | AI coding agents, always launched in a nono sandbox        |
 | [Jujutsu](https://github.com/jj-vcs/jj)                                            | Git-compatible version control, `jj`, with a simpler model |
-| [Containerization](https://github.com/apple/containerization)                      | Sandbox VM for agents, with no network device             |
+| [container](https://github.com/apple/container)                                    | Sandbox VM for agents, with no network device             |
 | [Vale](https://vale.sh)                                                            | Prose linter for markdown, Google style plus AI-tell rules |
 | eza, bat, fd, ripgrep, zoxide, yazi, mise                                          | Command-line replacements and workflow tools               |
 
