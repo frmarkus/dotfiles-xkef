@@ -29,7 +29,7 @@ mkdir -p "$repo/setup/private" "$repo/.mise/tasks" "$repo/private" \
   "$tmp/stub" "$tmp/home/.config/git" "$tmp/home/.ssh"
 cp setup/private/decrypt "$repo/setup/private/"
 cp .mise/tasks/encrypt "$repo/.mise/tasks/"
-age-keygen -o "$tmp/key" 2>/dev/null
+age-keygen -pq -o "$tmp/key" 2>/dev/null
 age-keygen -y "$tmp/key" >"$repo/private/recipients"
 printf '#!/bin/sh\ncat "%s"\n' "$tmp/key" >"$tmp/stub/op"
 chmod +x "$tmp/stub/op"

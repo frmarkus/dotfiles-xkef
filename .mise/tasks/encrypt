@@ -7,6 +7,13 @@ set -euo pipefail
 umask 077
 
 archive=private/home.tar.age
+
+# A classical X25519 recipient leaves the archive open to an attacker who
+# stores it now and decrypts it once a quantum computer exists.
+if grep -v -e '^#' -e '^$' private/recipients | grep -qv '^age1pq1'; then
+  echo "encrypt: private/recipients has a recipient that isn't post-quantum, age1pq1" >&2
+  exit 1
+fi
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/encrypt.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 mkdir "$tmp/home"
