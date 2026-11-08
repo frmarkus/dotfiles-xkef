@@ -41,7 +41,7 @@ For more on Jujutsu, see the `jj` skill.
    when it has one, such as `AskUserQuestion` in Claude Code, with one question
    per commit. Give each question an "Approve" option whose preview holds the
    full message and the files. The tool's free-text answer takes an edited
-   message. Without such a tool, show the message as text and ask.
+   message. Show the message as text and ask when no such tool exists.
 
 ## Commit message format
 

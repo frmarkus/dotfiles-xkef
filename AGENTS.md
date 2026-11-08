@@ -41,5 +41,5 @@ overrides it, or prefix the command with `env -u GITHUB_TOKEN`.
 ## Verification
 
 Run `mise run ci` before every commit, and fix what it reports. CI runs the same
-task, so a skipped run breaks main. `mise tasks --hidden` lists the single
+task, so a skipped run breaks main. `mise tasks --hidden` lists the individual
 checks, such as `mise run test:private`, for a faster loop.
