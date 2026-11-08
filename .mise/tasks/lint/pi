@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Type-check the pi extensions. Needs node."
+#MISE hide=true
 #MISE dir=".mise/pi"
 set -eu
 npm ci --no-audit --no-fund

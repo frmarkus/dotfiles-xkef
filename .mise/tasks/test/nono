@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Check that the nono profiles keep host-run files read-only"
+#MISE hide=true
 set -eu
 profiles=$PWD/modules/agents/.config/nono/profiles
 

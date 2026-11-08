@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Check the agent-state transitions, list format, and cleanup"
+#MISE hide=true
 set -eu
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-agent-state.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 #MISE description="Lint markdown"
+#MISE hide=true
 set -eu
 rumdl check --config .mise/rumdl.toml

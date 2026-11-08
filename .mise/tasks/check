@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Link each module selection into a throwaway HOME and assert results"
+#MISE hide=true
 set -eu
 # macOS mktemp ignores TMPDIR without a template.
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/check.XXXXXX")

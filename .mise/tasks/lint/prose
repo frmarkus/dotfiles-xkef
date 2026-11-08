@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Lint prose with vale and fail on any alert"
+#MISE hide=true
 #MISE depends=["vale:sync"]
 set -eu
 

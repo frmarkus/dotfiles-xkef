@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Check that the repo's git config commits without the private identity"
+#MISE hide=true
 set -eu
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-git.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Load LazyVim and kickstart headless. LazyVim needs its plugins installed."
+#MISE hide=true
 set -euo pipefail
 
 # A machine without Neovim or the LazyVim plugins has nothing to load.

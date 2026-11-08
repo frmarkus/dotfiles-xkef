@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 #MISE description="Run the behavior tests. Needs fish, jq, and jj."
+#MISE hide=true
 #MISE depends=["test:*"]

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Check that agentvm keeps its sandbox: proxy, shares, copy, review, status, and the VM's life"
+#MISE hide=true
 set -eu
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-agentvm.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT

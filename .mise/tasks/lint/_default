@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 #MISE description="Lint everything"
+#MISE hide=true
 #MISE depends=["lint:*"]
