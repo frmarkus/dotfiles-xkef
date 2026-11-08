@@ -3,12 +3,14 @@
 # $HOME with the age key in 1Password. One archive keeps the file names
 # out of the public repo. `mise run encrypt <file>` adds a file to it.
 # Without op, age, or the key, it decrypts nothing, and the next apply
-# retries.
+# retries. An archive without a valid signature from a key in
+# private/allowed_signers fails the apply.
 set -euo pipefail
 umask 077
 
-key_ref="op://Dev/dotfiles-age-key/password"
-archive="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/private/home.tar.age"
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$repo/setup/private/archive.sh"
+archive="$repo/private/home.tar.age"
 
 if ! command -v op >/dev/null || ! command -v age >/dev/null; then
   echo "private: op or age not found, skipping" >&2
@@ -17,6 +19,15 @@ fi
 if ! key=$(op read "$key_ref" 2>/dev/null); then
   echo "private: no age key at $key_ref, skipping" >&2
   exit 0
+fi
+
+if [[ ! -e "$archive.sig" ]]; then
+  echo "private: $archive.sig is missing. An archive from before signing needs one run of mise run encrypt to sign it" >&2
+  exit 1
+fi
+if ! verify_archive "$archive" "$repo"; then
+  echo "private: $archive fails its signature check against private/allowed_signers, refusing to decrypt" >&2
+  exit 1
 fi
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/private.XXXXXX")

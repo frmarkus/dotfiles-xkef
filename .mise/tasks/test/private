@@ -2,9 +2,8 @@
 #MISE description="Check that encrypt and decrypt round-trip the private archive"
 #MISE hide=true
 set -eu
-# macOS mktemp ignores TMPDIR without a template.
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-private.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+. .mise/lib.sh
+scratch test-private
 # The repo's git config includes the identity that decrypt writes.
 mkdir -p "$tmp/home/.config/git"
 ln -s "$PWD/modules/core/.config/git/config" "$tmp/home/.config/git/config"
@@ -24,18 +23,24 @@ test ! -e "$tmp/home/.config/git/identity" || {
 
 # encrypt archives files under $HOME into private/home.tar.age, and
 # decrypt writes them back, where git picks up the identity. Copies of the
-# scripts work on a test private/ with a test key, which a stub op returns.
+# scripts work on a test private/ with a test age key, which a stub op
+# returns, and a test signing key, which git config names.
 repo="$tmp/repo"
 mkdir -p "$repo/setup/private" "$repo/.mise/tasks" "$repo/private" \
   "$tmp/stub" "$tmp/home/.config/git" "$tmp/home/.ssh"
-cp setup/private/decrypt "$repo/setup/private/"
+cp setup/private/decrypt setup/private/archive.sh "$repo/setup/private/"
 cp .mise/tasks/encrypt "$repo/.mise/tasks/"
+cp .mise/lib.sh "$repo/.mise/"
 age-keygen -pq -o "$tmp/key" 2>/dev/null
 age-keygen -y "$tmp/key" >"$repo/private/recipients"
 printf '#!/bin/sh\ncat "%s"\n' "$tmp/key" >"$tmp/stub/op"
 chmod +x "$tmp/stub/op"
+ssh-keygen -q -t ed25519 -N '' -f "$tmp/signer"
+ssh-keygen -q -t ed25519 -N '' -f "$tmp/stranger"
+printf 'dotfiles namespaces="dotfiles-archive" %s\n' "$(cat "$tmp/signer.pub")" >"$repo/private/allowed_signers"
 run() {
-  (cd "$repo" && env PATH="$tmp/stub:$PATH" HOME="$tmp/home" "$@")
+  (cd "$repo" && env PATH="$tmp/stub:$PATH" HOME="$tmp/home" \
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.signingkey GIT_CONFIG_VALUE_0="$tmp/signer" "$@")
 }
 decrypt() { run setup/private/decrypt; }
 encrypt() { run .mise/tasks/encrypt "$@"; }
@@ -114,4 +119,35 @@ if encrypt "$local_fish" 2>/dev/null; then
   echo "encrypt accepted a link"
   exit 1
 fi
+
+# decrypt refuses an archive without a signature, with one from a key
+# that private/allowed_signers lacks, and with one for other content.
+archive="$repo/private/home.tar.age"
+rm "$local_fish"
+cp "$archive.sig" "$tmp/good.sig"
+rm "$archive.sig"
+if decrypt 2>/dev/null; then
+  echo "decrypt accepted an unsigned archive"
+  exit 1
+fi
+ssh-keygen -Y sign -n dotfiles-archive -f "$tmp/stranger" <"$archive" >"$archive.sig" 2>/dev/null
+if decrypt 2>/dev/null; then
+  echo "decrypt accepted a signature from a key it doesn't allow"
+  exit 1
+fi
+ssh-keygen -Y sign -n dotfiles-archive -f "$tmp/signer" <"$repo/private/recipients" >"$archive.sig" 2>/dev/null
+if decrypt 2>/dev/null || encrypt 2>/dev/null; then
+  echo "decrypt or encrypt accepted a signature for other content"
+  exit 1
+fi
+test ! -e "$local_fish" || {
+  echo "decrypt wrote from an archive it refused"
+  exit 1
+}
+cp "$tmp/good.sig" "$archive.sig"
+decrypt 2>/dev/null
+test -e "$local_fish" || {
+  echo "decrypt refused a good signature"
+  exit 1
+}
 echo "private ok"
