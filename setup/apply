@@ -123,9 +123,9 @@ function step_system
     end
 
     # Docker clients reach podman through its user socket on Linux,
-    # which hooks.fish exports as DOCKER_HOST. On macOS the helper links
-    # /var/run/docker.sock to the machine's socket at each `podman
-    # machine start`.
+    # which conf.d/podman.fish exports as DOCKER_HOST. On macOS the
+    # helper links /var/run/docker.sock to the machine's socket at each
+    # `podman machine start`.
     set -l helper /Library/LaunchDaemons/com.github.containers.podman
     set helper $helper.helper-$USER.plist
     if test (uname -s) = Linux; and command -q podman

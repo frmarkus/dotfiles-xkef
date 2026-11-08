@@ -16,20 +16,7 @@ git clone https://github.com/xkef/dotfiles ~/dotfiles
 
 Bootstrap installs the `core` packages, which bring fish, then runs
 `setup/apply`. After that, `dots apply` runs it again. Each run prints its
-pipeline and then works through it:
-
-```text
-  1 packages  install each module's package list
-  2 links     link modules/<module>/ into ~
-  3 private   unpack private/home.tar.age (desktop)
-  4 agents    link the shared skills, seed pi settings (agents)
-  5 system    file modes, sockets, and jj in this checkout
-  6 macos     apply the macOS defaults (desktop on macOS)
-  7 shell     make fish the login shell
-  8 theme     apply the current theme
-  9 zoxide    add every repo to zoxide
-```
-
+pipeline, which [`setup/apply`](setup/apply) lists, and then works through it.
 Each step can run again without harm, so a rerun repairs whatever drifted.
 `dots diff` prints the link changes without making them.
 
@@ -38,8 +25,9 @@ The machine's state lives in `~/.local/state/dotfiles`, which the repo links as
 `vm/`:
 
 - `modules` selects the modules under `modules/`. A machine gets `core`,
-  `desktop`, and `agents`, and the agent VM gets `core` and `agents`. The extras
-  `wezterm`, `rex`, `helix`, `zed`, and `kickstart` go in by hand.
+  `desktop`, and `agents`, plus `agentvm` on macOS, and the agent VM gets `core`
+  and `agents`. The extras `wezterm`, `rex`, `helix`, `zed`, and `kickstart` go
+  in by hand.
 - `links` lists every link the last run made, so a file removed from the repo
   loses its link.
 - `backup/` holds the files that stood where a link goes.
@@ -92,7 +80,9 @@ session's cost, and the status line shows the key's spend today and this month.
 Private files, such as the git identity, live in `private/home.tar.age`, an
 [age](https://age-encryption.org) archive whose key sits in 1Password. A desktop
 apply unpacks it into `$HOME`, next to the configs that include each file.
-`mise run encrypt <file>` adds or updates one.
+`mise run encrypt <file>` adds or updates one and signs the archive with git's
+signing key. The apply refuses an archive without a signature from a key in
+`private/allowed_signers`.
 
 ## Credits
 

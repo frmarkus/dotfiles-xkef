@@ -2,7 +2,7 @@
 # Adds the directories zoxide never saw through a cd, so they are jumpable
 # before the first visit: every repo under ~ with the directories above it,
 # and every directory in atuin's history. A directory zoxide knows keeps
-# its score. setup/bootstrap runs it.
+# its score. setup/apply runs it.
 
 # Repos sit a few levels deep, as in ~/code/topic/group/repo. A repo under
 # a hidden directory, such as a tool's cache, doesn't count.
