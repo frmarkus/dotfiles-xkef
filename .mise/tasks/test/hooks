@@ -5,9 +5,15 @@ set -eu
 guard=$PWD/modules/agents/.claude/hooks/claude-bash-guard
 failed=0
 
-# The checkout is a jj repository, and / sits in none, so the jj check runs
-# without creating a repository.
-repo=$PWD
+# jj runs in this scratch directory, so it sits outside the checkout. See
+# scratch in .mise/lib.sh. CI checks out with plain git, so the checkout
+# itself is no jj repository there. / sits in none.
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-hooks.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+printf '[user]\nname = "Test"\nemail = "test@example.com"\n' >"$tmp/jj.toml"
+export JJ_CONFIG="$tmp/jj.toml"
+repo=$tmp/repo
+jj git init --quiet "$repo"
 outside=/
 
 # Built at run time, so this file doesn't trip the hook while it's edited.
