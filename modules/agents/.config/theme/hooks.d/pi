@@ -5,15 +5,6 @@
 # active custom theme file and reloads it on change, so rewriting it
 # recolors running pi sessions. The file is machine-local and untracked.
 
-# Blends two hex colors: _blend_hex bg fg weight, with weight from 0 to 100.
-function _blend_hex -a bg_hex fg_hex weight
-    set -l rgb1 (string sub -l 2 $bg_hex) (string sub -s 3 -l 2 $bg_hex) (string sub -s 5 -l 2 $bg_hex)
-    set -l rgb2 (string sub -l 2 $fg_hex) (string sub -s 3 -l 2 $fg_hex) (string sub -s 5 -l 2 $fg_hex)
-    for i in 1 2 3
-        printf '%02x' (math "round((0x$rgb1[$i] * (100 - $weight) + 0x$rgb2[$i] * $weight) / 100)")
-    end
-end
-
 set -l bg $THEME_BACKGROUND
 set -l fg $THEME_FOREGROUND
 
@@ -31,20 +22,20 @@ if test -d $pi_agent_dir
 
     # Blend the grays toward the foreground instead of taking the ANSI
     # bright-black slot, so the ramp inverts by itself under light themes.
-    set -l pi_gray (_blend_hex $bg $fg 60)
-    set -l pi_dim_gray (_blend_hex $bg $fg 45)
-    set -l pi_dark_gray (_blend_hex $bg $fg 30)
+    set -l pi_gray (theme_mix $bg $fg 0.6)
+    set -l pi_dim_gray (theme_mix $bg $fg 0.45)
+    set -l pi_dark_gray (theme_mix $bg $fg 0.3)
 
     # Message and tool-box backgrounds: a wash of one palette color over the
     # terminal background, matching how the delta adapter tints diff hunks.
-    set -l pi_selected_bg (_blend_hex $bg $pi_cyan 24)
-    set -l pi_search_bg (_blend_hex $bg $pi_yellow 28)
-    set -l pi_user_bg (_blend_hex $bg $pi_blue 16)
-    set -l pi_custom_bg (_blend_hex $bg $pi_magenta 15)
-    set -l pi_pending_bg (_blend_hex $bg $pi_cyan 8)
-    set -l pi_success_bg (_blend_hex $bg $pi_green 12)
-    set -l pi_error_bg (_blend_hex $bg $pi_red 14)
-    set -l pi_info_bg (_blend_hex $bg $pi_yellow 18)
+    set -l pi_selected_bg (theme_mix $bg $pi_cyan 0.24)
+    set -l pi_search_bg (theme_mix $bg $pi_yellow 0.28)
+    set -l pi_user_bg (theme_mix $bg $pi_blue 0.16)
+    set -l pi_custom_bg (theme_mix $bg $pi_magenta 0.15)
+    set -l pi_pending_bg (theme_mix $bg $pi_cyan 0.08)
+    set -l pi_success_bg (theme_mix $bg $pi_green 0.12)
+    set -l pi_error_bg (theme_mix $bg $pi_red 0.14)
+    set -l pi_info_bg (theme_mix $bg $pi_yellow 0.18)
 
     # pi requires all 51 mandatory tokens in every theme. The four optional
     # ones follow so search matches and the scrollbar don't collapse into

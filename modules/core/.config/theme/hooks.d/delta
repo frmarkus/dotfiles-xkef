@@ -10,15 +10,9 @@ set -l state_home ~/.local/state
 set -q XDG_STATE_HOME; and set state_home $XDG_STATE_HOME
 set -l out $state_home/theme/delta.gitconfig
 
-# Prints a rrggbb color mixed into the background at the given ratio.
+# Prints a #rrggbb color mixed into the background at the given ratio.
 function _mix -a color ratio
-    set -l rgb
-    for i in 1 3 5
-        set -l bg 0x(string sub -s $i -l 2 $THEME_BACKGROUND)
-        set -l fg 0x(string sub -s $i -l 2 $color)
-        set -a rgb (math "round($bg + ($fg - $bg) * $ratio)")
-    end
-    printf '#%02x%02x%02x' $rgb
+    echo "#"(theme_mix $THEME_BACKGROUND $color $ratio)
 end
 
 # Line numbers and rules use the foreground at a contrast that stays

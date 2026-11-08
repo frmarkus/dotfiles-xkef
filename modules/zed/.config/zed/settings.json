@@ -92,11 +92,7 @@
     "snippets": true,
     "rainbow-csv": true,
     "dependi": true,
-    "catppuccin": true,
     "catppuccin-icons": true,
-    "tokyo-night": true,
-    "rose-pine-theme": true,
-    "gruvbox-material": true,
     "nord": true
   },
   "file_types": {

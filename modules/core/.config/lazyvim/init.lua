@@ -32,27 +32,15 @@ if not vim.uv.fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
-local function apply_theme()
-  local ok, theme = pcall(require, "theme")
-  if ok and type(theme.apply) == "function" then
-    theme.apply()
-  else
-    pcall(vim.cmd.colorscheme, "habamax")
-  end
-end
-
 require("lazy").setup({
   spec = {
     {
       "LazyVim/LazyVim",
       import = "lazyvim.plugins",
       opts = {
-        colorscheme = apply_theme,
+        colorscheme = require("theme").apply,
       },
     },
     { import = "plugins" },
   },
 })
-
--- lua/config/autocmds.lua registers the theme reload. LazyVim applies the
--- initial colorscheme above.
