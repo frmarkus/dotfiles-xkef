@@ -1,3 +1,6 @@
+# Each entry reaches the shell in single quotes with ' rewritten as '\'',
+# which keeps $(...) and quotes in names inert. fish reads backslashes
+# inside single quotes, so the commands that carry an entry pin bash.
 [metadata]
 name = "jj-diff"
 description = "A channel to select files changed in the jujutsu (jj) working copy"
@@ -7,7 +10,8 @@ requirements = ["jj"]
 command = "jj diff --name-only"
 
 [preview]
-command = "jj diff --color always '{}'"
+command = "jj diff --color always '{replace:s/'/'\\''/g}'"
+shell = "bash"
 
 [keybindings]
 alt-r = "actions:restore"
@@ -17,21 +21,28 @@ alt-a = "actions:absorb"
 
 [actions.restore]
 description = "Discard changes in the selected file"
-command = "jj restore {}"
+command = "jj restore -- {split:\\n:..|map:{replace:s/'/'\\''/g|append:'|prepend:'}|join: }"
+shell = "bash"
+separator = "\n"
 mode = "fork"
 
 [actions.edit]
 description = "Open the selected file in editor"
-command = "${EDITOR:-nvim} {}"
+command = "${EDITOR:-nvim} {split:\\n:..|map:{replace:s/'/'\\''/g|append:'|prepend:'}|join: }"
 shell = "bash"
+separator = "\n"
 mode = "execute"
 
 [actions.squash]
 description = "Squash changes to the selected file into the parent change"
-command = "jj squash -- {}"
+command = "jj squash -- {split:\\n:..|map:{replace:s/'/'\\''/g|append:'|prepend:'}|join: }"
+shell = "bash"
+separator = "\n"
 mode = "fork"
 
 [actions.absorb]
 description = "Absorb changes to the selected file into the appropriate ancestor"
-command = "jj absorb -- {}"
+command = "jj absorb -- {split:\\n:..|map:{replace:s/'/'\\''/g|append:'|prepend:'}|join: }"
+shell = "bash"
+separator = "\n"
 mode = "fork"

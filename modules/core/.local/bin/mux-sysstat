@@ -10,13 +10,20 @@ set -euo pipefail
 readonly CPU_HIGH=80
 
 # Holds the last smoothed CPU and, on Linux, the busy and total jiffies.
-readonly SMOOTH="${TMPDIR:-/tmp}/mux-sysstat-smooth"
+# A shared /tmp lets another user plant this file, so it lives in a
+# directory only this user can write.
+STATE_DIR=${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}}
+readonly SMOOTH="$STATE_DIR/mux-sysstat-smooth"
 OS=$(uname)
 readonly OS
 
 # ── CPU, normalized to 0-100% and smoothed ───────────
+# Bash arithmetic evaluates its operands as expressions, so each value
+# read back must be a plain integer.
 prev_cpu='' prev_busy='' prev_total=''
 [ -f "$SMOOTH" ] && read -r prev_cpu prev_busy prev_total <"$SMOOTH"
+[[ "$prev_cpu" =~ ^[0-9]+$ ]] || prev_cpu=''
+[[ "$prev_busy" =~ ^[0-9]+$ && "$prev_total" =~ ^[0-9]+$ ]] || prev_busy='' prev_total=''
 
 # macOS ps reports a decaying average of recent load. procps ps reports CPU
 # time over each process's lifetime, so Linux reads /proc/stat instead and
@@ -37,13 +44,6 @@ else
 fi
 ((raw > 100)) && raw=100
 
-prev=${prev_cpu:-$raw}
-cpu=$(awk "BEGIN {printf \"%.0f\", 0.3 * $raw + 0.7 * $prev}")
-echo "$cpu $busy $cpu_total" >"$SMOOTH"
-
-level=normal
-((cpu >= CPU_HIGH)) && level=high
-
 # ── Memory, used / total ─────────────────────────────
 if [[ "$OS" == Darwin ]]; then
   {
@@ -61,11 +61,17 @@ else
     /^MemAvailable:/ { a=$2*1024 }
     END { printf "%.0f %.0f", t, t-a }' /proc/meminfo)"
 fi
-mem_pct=$((used * 100 / total))
-((mem_pct > 100)) && mem_pct=100
 
-used_g=$(awk "BEGIN {printf \"%.1f\", $used / 1073741824}")
-total_g=$(awk "BEGIN {printf \"%.0f\", $total / 1073741824}")
+# ── Smoothing and units ───────────────────────────────
+read -r cpu used_g total_g < <(awk -v raw="$raw" -v prev="${prev_cpu:-$raw}" \
+  -v used="$used" -v total="$total" 'BEGIN {
+    printf "%.0f %.1f %.0f\n", 0.3 * raw + 0.7 * prev, used / 1073741824, total / 1073741824
+  }')
+mkdir -p "$STATE_DIR"
+echo "$cpu $busy $cpu_total" >"$SMOOTH"
+
+level=normal
+((cpu >= CPU_HIGH)) && level=high
 
 # ── Output ────────────────────────────────────────────
 if [[ "${1:-}" == --tmux ]]; then

@@ -1,5 +1,9 @@
 # Overrides tv's default files channel. Dotfiles live under hidden
 # directories such as .config, which fd skips without --hidden.
+#
+# Each entry reaches the shell in single quotes with ' rewritten as '\'',
+# which keeps $(...) and quotes in names inert. fish reads backslashes
+# inside single quotes, so the commands that carry an entry pin bash.
 [metadata]
 name = "files"
 description = "A channel to select files, hidden ones included"
@@ -9,7 +13,8 @@ requirements = ["fd", "bat"]
 command = "fd -t f --hidden --exclude .git --exclude .jj"
 
 [preview]
-command = "bat -n --color=always '{}'"
+command = "bat -n --color=always '{replace:s/'/'\\''/g}'"
+shell = "bash"
 env = { BAT_THEME = "ansi" }
 
 [keybindings]

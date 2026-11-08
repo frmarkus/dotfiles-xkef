@@ -1,3 +1,6 @@
+# Each entry reaches the shell in single quotes with ' rewritten as '\'',
+# which keeps $(...) and quotes in names inert. fish reads backslashes
+# inside single quotes, so the commands that carry an entry pin bash.
 [metadata]
 name = "jj-bookmark"
 description = "A channel to select from jujutsu (jj) bookmarks"
@@ -9,7 +12,8 @@ display = "{split:\t:0}"
 output = "{split:\t:0}"
 
 [preview]
-command = "jj log --color=always --no-graph -r '{split:\t:0}'"
+command = "jj log --color=always --no-graph -r '{split:\t:0|replace:s/'/'\\''/g}'"
+shell = "bash"
 
 [keybindings]
 enter = "actions:edit"
@@ -21,25 +25,30 @@ alt-t = "actions:track"
 
 [actions.edit]
 description = "Edit the change at the selected bookmark"
-command = "jj edit '{split:\t:0}'"
+command = "jj edit '{split:\t:0|replace:s/'/'\\''/g}'"
+shell = "bash"
 mode = "execute"
 
 [actions.delete]
 description = "Delete the selected bookmark"
-command = "jj bookmark delete '{split:\t:0}'"
+command = "jj bookmark delete '{split:\t:0|replace:s/'/'\\''/g}'"
+shell = "bash"
 mode = "execute"
 
 [actions.set]
 description = "Move the selected bookmark to the working copy"
-command = "jj bookmark set '{split:\t:0}' -r @"
+command = "jj bookmark set '{split:\t:0|replace:s/'/'\\''/g}' -r @"
+shell = "bash"
 mode = "execute"
 
 [actions.forget]
 description = "Forget the selected bookmark (without deleting it on the remote)"
-command = "jj bookmark forget '{split:\t:0}'"
+command = "jj bookmark forget '{split:\t:0|replace:s/'/'\\''/g}'"
+shell = "bash"
 mode = "execute"
 
 [actions.track]
 description = "Track the remote counterpart of the selected bookmark"
-command = "jj bookmark track '{split:\t:0}@origin'"
+command = "jj bookmark track '{split:\t:0|replace:s/'/'\\''/g}@origin'"
+shell = "bash"
 mode = "execute"

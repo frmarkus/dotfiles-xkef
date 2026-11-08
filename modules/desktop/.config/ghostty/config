@@ -12,11 +12,10 @@ minimum-contrast = 1.1
 macos-option-as-alt = left
 
 # ── Theme ─────────────────────────────────────────────
-# Tracked default only. The ghostty hook of `theme` links the untracked
-# ./theme to the theme's palette file and reloads Ghostty. The optional
-# include loads after this file, so it wins. The path is absolute because
-# this file is a link into the dotfiles repo.
-theme = Catppuccin Frappe
+# The ghostty hook of `theme` links the untracked ./theme to the theme's
+# palette file and reloads Ghostty. Until then Ghostty keeps its own
+# colors, and `theme` alone holds the default theme. The path is absolute
+# because this file is a link into the dotfiles repo.
 config-file = ?~/.config/ghostty/theme
 
 # ── Window ────────────────────────────────────────────
@@ -36,7 +35,6 @@ shell-integration-features = cursor,sudo,title,ssh-env
 custom-shader = ~/.config/ghostty/shaders/cursor_smear.glsl
 
 # ── Clipboard ────────────────────────────────────────
-clipboard-read = allow
 copy-on-select = clipboard
 
 # ── Mouse ─────────────────────────────────────────────

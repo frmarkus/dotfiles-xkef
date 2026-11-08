@@ -9,7 +9,7 @@
 set -euo pipefail
 
 readonly HISTORY_LINES=2000
-readonly URL_PATTERN='(https?|ftp|file)://[^[:space:]<>"`'"'"']+'
+readonly URL_PATTERN='https?://[^[:space:]<>"`'"'"']+'
 
 pane=${1:-$(wezterm cli get-pane-direction up)}
 
