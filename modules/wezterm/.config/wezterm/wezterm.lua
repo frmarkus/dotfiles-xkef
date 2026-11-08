@@ -30,7 +30,7 @@ local FAINT_OPACITY = 0.5
 -- border below it.
 local STATUS_ABOVE = 0.5
 local STATUS_BELOW = 0.25
-local STATUS_UPDATE_MS = 100
+local STATUS_UPDATE_MS = 500
 
 local colors = require("colors")
 colors.apply(config)
@@ -96,8 +96,11 @@ config.native_macos_fullscreen_mode = true
 config.use_fancy_tab_bar = false
 config.tab_bar_at_bottom = true
 config.show_new_tab_button_in_tab_bar = false
--- The bar redraws often enough that the mode label follows copy mode and
--- mouse selections without a visible lag.
+-- WezTerm redraws the bar when copy mode starts or a key table changes,
+-- and the copymode.lua actions redraw it after each selection change. The
+-- interval covers the rest, such as the clock, leaving copy mode, and a
+-- mouse selection outside copy mode, and each tick reads the selection
+-- text, so it stays coarse.
 config.status_update_interval = STATUS_UPDATE_MS
 config.tab_max_width = 34
 config.colors.tab_bar = { background = config.colors.background }

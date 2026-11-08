@@ -5,8 +5,16 @@
 local JJ_TEMPLATE = 'separate(" ", change_id.shortest(8), bookmarks.join(" "))'
 local jj_status = {}
 
+-- vim.fs.root walks up the directory tree, and the statusline asks for the
+-- root three times per render, so each buffer keeps the answer until the
+-- next BufEnter or DirChanged. An empty string means no jj repo.
 local function jj_root()
-  return vim.fs.root(0, ".jj")
+  local root = vim.b.jj_root
+  if root == nil then
+    root = vim.fs.root(0, ".jj") or ""
+    vim.b.jj_root = root
+  end
+  return root ~= "" and root or nil
 end
 
 local function jj_refresh()
@@ -35,7 +43,12 @@ return {
     init = function()
       vim.api.nvim_create_autocmd({ "BufEnter", "FocusGained", "DirChanged", "BufWritePost" }, {
         group = vim.api.nvim_create_augroup("lualine_jj", { clear = true }),
-        callback = jj_refresh,
+        callback = function(ev)
+          if ev.event == "BufEnter" or ev.event == "DirChanged" then
+            vim.b.jj_root = nil
+          end
+          jj_refresh()
+        end,
       })
     end,
     opts = {

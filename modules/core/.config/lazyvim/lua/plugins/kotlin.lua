@@ -9,6 +9,12 @@ local MAVEN_CENTRAL = "https://repo1.maven.org/maven2"
 local SOURCES_DIR = vim.fn.stdpath("cache") .. "/sources"
 local DECL_KEYWORDS = { "class", "interface", "enum", "record" }
 
+-- These calls block the editor, so a stalled download or mise gives up
+-- instead of hanging it. vim.system's wait() kills the process and returns
+-- code 124 on timeout.
+local DOWNLOAD_TIMEOUT_MS = 15000
+local LOCAL_TIMEOUT_MS = 5000
+
 -- Finds the sources jar of a jar in the Gradle cache, laid out as
 -- files-2.1/<group>/<artifact>/<version>/<sha1>/<artifact>-<version>.jar.
 -- Gradle downloads sources for some libraries only, so a missing one
@@ -32,7 +38,7 @@ local function sources_jar(jar)
 
   vim.fn.mkdir(vim.fs.dirname(path), "p")
   local url = ("%s/%s/%s/%s/%s"):format(MAVEN_CENTRAL, (group:gsub("%.", "/")), artifact, version, name)
-  if vim.system({ "curl", "-fsSL", "-o", path, url }):wait().code ~= 0 then
+  if vim.system({ "curl", "-fsSL", "-o", path, url }):wait(DOWNLOAD_TIMEOUT_MS).code ~= 0 then
     os.remove(path)
     return nil
   end
@@ -48,7 +54,7 @@ local function jdk_src_zip(home)
     end
   end
 
-  local mise = vim.system({ "mise", "where", "java" }):wait()
+  local mise = vim.system({ "mise", "where", "java" }):wait(LOCAL_TIMEOUT_MS)
   local zip = vim.trim(mise.stdout or "") .. "/lib/src.zip"
   return mise.code == 0 and vim.uv.fs_stat(zip) and zip or nil
 end
@@ -70,7 +76,7 @@ local function read_source(uri)
     return nil
   end
 
-  local res = vim.system({ "unzip", "-p", src, class:gsub("%$.*", "") .. ".java" }):wait()
+  local res = vim.system({ "unzip", "-p", src, class:gsub("%$.*", "") .. ".java" }):wait(LOCAL_TIMEOUT_MS)
   return res.code == 0 and res.stdout or nil
 end
 
@@ -136,6 +142,7 @@ end
 -- read_source looks up the sources jar itself. Treesitter highlights the
 -- buffer without a filetype, so jdtls doesn't attach to it.
 vim.api.nvim_create_autocmd("BufReadCmd", {
+  group = vim.api.nvim_create_augroup("kotlin_lsp_decompile", { clear = true }),
   pattern = { "jar:/*", "jrt:/*" },
   callback = function(args)
     local client = vim.lsp.get_clients({ name = "kotlin_lsp" })[1]

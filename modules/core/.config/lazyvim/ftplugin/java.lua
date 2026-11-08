@@ -26,8 +26,12 @@ _G._kk.java_foldexpr = function()
 end
 vim.opt_local.foldexpr = "v:lua._kk.java_foldexpr()"
 
+-- The ftplugin reruns on each :edit or filetype set, so a per-buffer group
+-- keeps one autocmd per buffer.
+local buf = vim.api.nvim_get_current_buf()
 vim.api.nvim_create_autocmd("BufWinEnter", {
-  buffer = vim.api.nvim_get_current_buf(),
+  group = vim.api.nvim_create_augroup("java_import_fold_" .. buf, { clear = true }),
+  buffer = buf,
   callback = function()
     if vim.wo.foldlevel >= IMPORT_FOLD_LEVEL then
       vim.wo.foldlevel = IMPORT_FOLD_LEVEL - 1

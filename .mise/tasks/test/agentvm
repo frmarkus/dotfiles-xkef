@@ -2,14 +2,12 @@
 #MISE description="Check that agentvm keeps its sandbox: proxy, shares, copy, review, status, and the VM's life"
 #MISE hide=true
 set -eu
+. .mise/lib.sh
+# git and jj run in this scratch directory, so it sits outside the
+# checkout. See scratch in .mise/lib.sh.
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-agentvm.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 script=$PWD/modules/agentvm/.local/libexec/agentvm/agentvm
-
-fail() {
-  echo "$1" >&2
-  exit 1
-}
 
 # Stubs that log every argument list to $ARGV_LOG. The container stub
 # stands in for the VM: a run records the VM under $VMS with its shares
@@ -468,6 +466,6 @@ visible=$(printf 'a\033[2Jb\r\302\233c\tok \303\274\n' |
 
 # The prompt in the VM shows the shield that WezTerm puts on VM panes.
 mark=$(sed -n 's/^M\.MARK = "\(.*\)"$/\1/p' modules/wezterm/.config/wezterm/agentvm.lua)
-[ -n "$mark" ] && sed -n '/^\[custom\.agentvm\]/,/^format/p' modules/core/.config/starship.toml | grep -qxF "symbol = '$mark '" ||
+[ -n "$mark" ] && sed -n '/^\[env_var\.PROMPT_AGENTVM\]/,/^format/p' modules/core/.config/starship.toml | grep -qxF "symbol = '$mark '" ||
   fail "the VM's prompt lacks WezTerm's shield"
 echo "agentvm ok"

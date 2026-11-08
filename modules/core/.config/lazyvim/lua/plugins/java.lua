@@ -56,19 +56,14 @@ return {
     opts = { formatters_by_ft = { java = { "google-java-format" } } },
   },
 
-  -- jdtls reads this flag only as a JVM system property, not from LSP
-  -- settings. It keeps .project and .classpath out of the project root.
   {
     "mfussenegger/nvim-jdtls",
     opts = function(_, opts)
+      -- jdtls reads this flag only as a JVM system property, not from LSP
+      -- settings. It keeps .project and .classpath out of the project root.
       table.insert(opts.cmd, "--jvm-arg=-Djava.import.generatesMetadataFilesAtProjectRoot=false")
-    end,
-  },
 
-  {
-    "mfussenegger/nvim-jdtls",
-    opts = {
-      jdtls = function(config)
+      opts.jdtls = function(config)
         local ok, spring_boot = pcall(require, "spring_boot")
         if ok then
           vim.list_extend(config.init_options.bundles, spring_boot.java_extensions())
@@ -78,10 +73,13 @@ return {
           vim.fn.glob("$MASON/share/vscode-java-dependency/com.microsoft.jdtls.ext.core-*.jar", false, true)
         )
         return config
-      end,
+      end
 
-      settings = {
+      -- jdtls organizes imports in its reply to willSaveWaitUntil, which
+      -- Neovim sends before each write.
+      opts.settings = vim.tbl_deep_extend("force", opts.settings or {}, {
         java = {
+          saveActions = { organizeImports = true },
           signatureHelp = { enabled = true },
           contentProvider = { preferred = "fernflower" },
           completion = {
@@ -100,34 +98,16 @@ return {
             },
           },
         },
-      },
+      })
 
-      on_attach = function(args)
+      opts.on_attach = function(args)
         local bufnr = args.buf
         local client = vim.lsp.get_client_by_id(args.data.client_id)
         local root_dir = client and client.config.root_dir
 
         if root_dir then
           vim.api.nvim_set_current_dir(root_dir)
-        end
 
-        vim.api.nvim_create_autocmd("BufWritePre", {
-          buffer = bufnr,
-          callback = function()
-            local params = vim.lsp.util.make_range_params(0, "utf-16")
-            params.context = { only = { "source.organizeImports" } }
-            local result = vim.lsp.buf_request_sync(bufnr, "textDocument/codeAction", params, 3000)
-            for _, res in pairs(result or {}) do
-              for _, r in pairs(res.result or {}) do
-                if r.edit then
-                  vim.lsp.util.apply_workspace_edit(r.edit, "utf-16")
-                end
-              end
-            end
-          end,
-        })
-
-        if root_dir then
           local mvn = vim.fn.executable("mvnd") == 1 and "mvnd" or "mvn"
           local m = function(keys, func, desc)
             vim.keymap.set("n", keys, func, { buffer = bufnr, desc = desc })
@@ -146,7 +126,7 @@ return {
             require("dap").continue()
           end, "Debug Spring Boot")
         end
-      end,
-    },
+      end
+    end,
   },
 }
