@@ -2,6 +2,8 @@
 #MISE description="Check that the repo's git config commits without the private identity"
 #MISE hide=true
 set -eu
+# git and jj run in this scratch directory, so it sits outside the
+# checkout. See scratch in .mise/lib.sh.
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-git.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 

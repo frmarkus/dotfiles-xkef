@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Download the vale style packages"
 #MISE hide=true
+#MISE sources=[".mise/vale/.vale.ini"]
+#MISE outputs=[".mise/vale/styles/*/*.yml"]
+# vale sync downloads every package again on each run, so mise runs it
+# only when .vale.ini is newer than the downloaded rules.
 set -eu
 vale --no-global --config .mise/vale/.vale.ini sync

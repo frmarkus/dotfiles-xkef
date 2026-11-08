@@ -2,13 +2,8 @@
 #MISE description="Check the profile and settings sb passes to nono"
 #MISE hide=true
 set -eu
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-sb.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
-
-fail() {
-  echo "$1" >&2
-  exit 1
-}
+. .mise/lib.sh
+scratch test-sb
 
 # A stub nono records its arguments.
 mkdir -p "$tmp/bin" "$tmp/home/.claude"

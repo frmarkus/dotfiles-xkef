@@ -2,18 +2,12 @@
 #MISE description="Check that setup/link links, backs up, prunes, and reruns clean"
 #MISE hide=true
 set -eu
-# macOS mktemp ignores TMPDIR without a template.
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-link.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+. .mise/lib.sh
+scratch test-link
 export HOME="$tmp/home"
 state="$tmp/state"
 repo=$PWD
 mkdir -p "$HOME/.config/fish"
-
-fail() {
-  echo "$1" >&2
-  exit 1
-}
 
 # A dry run changes nothing.
 setup/link --dry-run "$state" core >/dev/null

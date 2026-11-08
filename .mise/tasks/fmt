@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
 #MISE description="Format all dotfiles"
+#USAGE flag "--check" help="Fail on unformatted files and write nothing"
 set -eu
+. .mise/lib.sh
+
+if [ "${usage_check:-false}" = true ]; then
+  stylua --check modules/
+  shell_files | xargs shfmt -d
+  fish_files | xargs fish_indent --check
+  dprint check --config .mise/dprint.json
+  git ls-files -z '*.toml' | xargs -0 taplo fmt --check
+  exit
+fi
 
 stylua modules/
-git ls-files -z | xargs -0 shfmt -f | xargs shfmt -w
-# Scripts without a .fish extension count through their shebang.
-{ git ls-files '*.fish' && git grep -lE '^#!/usr/bin/env (-S )?fish' -- modules setup; } | xargs fish_indent -w
+shell_files | xargs shfmt -w
+fish_files | xargs fish_indent -w
 dprint fmt --config .mise/dprint.json
 git ls-files -z '*.toml' | xargs -0 taplo fmt

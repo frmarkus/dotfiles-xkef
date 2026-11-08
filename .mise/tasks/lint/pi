@@ -3,5 +3,10 @@
 #MISE hide=true
 #MISE dir=".mise/pi"
 set -eu
-npm ci --no-audit --no-fund
+
+# npm ci writes node_modules/.package-lock.json, so a copy older than the
+# lockfile means the lockfile changed since the last install.
+if [ ! node_modules/.package-lock.json -nt package-lock.json ]; then
+  npm ci --no-audit --no-fund
+fi
 npx tsc

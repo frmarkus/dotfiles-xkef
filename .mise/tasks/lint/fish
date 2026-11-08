@@ -2,8 +2,5 @@
 #MISE description="Check fish syntax"
 #MISE hide=true
 set -eu
-
-# Scripts without a .fish extension count through their shebang.
-for f in $(git ls-files '*.fish' && git grep -lE '^#!/usr/bin/env (-S )?fish' -- modules setup); do
-  fish --no-execute "$f"
-done
+. .mise/lib.sh
+fish_files | xargs -n 1 fish --no-execute

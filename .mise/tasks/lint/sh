@@ -2,5 +2,5 @@
 #MISE description="Check bash scripts with shellcheck"
 #MISE hide=true
 set -eu
-# Tracked files only, so node_modules and scratch directories stay out.
-git ls-files -z | xargs -0 shfmt -f | xargs shellcheck -S warning
+. .mise/lib.sh
+shell_files | xargs shellcheck -S warning
