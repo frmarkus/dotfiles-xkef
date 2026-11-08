@@ -63,12 +63,20 @@ apply() {
   if $DRY_RUN; then
     local current expected
     current=$(read_default $flag "$domain" "$key")
-    expected=$(normalize "$type" "$value")
 
     if [[ -z "$current" ]]; then
       printf '  \033[33m+\033[0m %s %s \033[2m(not set -> %s)\033[0m\n' "$domain" "$key" "$value"
       ((missing++)) || true
       return
+    fi
+
+    # `defaults read` prints ints and strings as written, and the bool
+    # comparison below maps both spellings. Only a float can print in
+    # another form than the one written, and learning it costs three
+    # defaults calls.
+    expected=$value
+    if [[ "$type" == "-float" ]]; then
+      expected=$(normalize "$type" "$value")
     fi
 
     # Normalize booleans

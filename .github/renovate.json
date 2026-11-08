@@ -7,6 +7,7 @@
   ],
   "schedule": ["* * 1,15 * *"],
   "minimumReleaseAge": "7 days",
+  "platformCommit": "enabled",
   "packageRules": [
     {
       "matchManagers": ["github-actions"],
@@ -28,6 +29,55 @@
       "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": ["mise use -g jj@(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "depNameTemplate": "jj-vcs/jj",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "mise installed in the agent VM's image",
+      "managerFilePatterns": ["/^setup/agentvm/packages$/"],
+      "matchStrings": ["MISE_VERSION=v(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "jdx/mise",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Claude Code installed in the agent VM's image",
+      "managerFilePatterns": ["/^setup/agentvm/provision$/"],
+      "matchStrings": [
+        "claude\\.ai/install\\.sh \\| bash -s -- (?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "@anthropic-ai/claude-code",
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "dprint plugins from dprint's own repositories",
+      "managerFilePatterns": ["/^\\.mise/dprint\\.json$/"],
+      "matchStrings": [
+        "https://plugins\\.dprint\\.dev/(?<depName>[a-z]+)-(?<currentValue>\\d+\\.\\d+\\.\\d+)\\.wasm"
+      ],
+      "packageNameTemplate": "dprint/dprint-plugin-{{{depName}}}",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "dprint plugins from other repositories",
+      "managerFilePatterns": ["/^\\.mise/dprint\\.json$/"],
+      "matchStrings": [
+        "https://plugins\\.dprint\\.dev/(?<depName>[^/\"]+/[^/\"]+)-v(?<currentValue>\\d+\\.\\d+\\.\\d+)\\.wasm"
+      ],
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "vale ai-tells style package",
+      "managerFilePatterns": ["/^\\.mise/vale/\\.vale\\.ini$/"],
+      "matchStrings": [
+        "https://github\\.com/(?<depName>tbhb/vale-ai-tells)/releases/download/v(?<currentValue>[^/]+)/ai-tells\\.zip"
+      ],
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v(?<version>.+)$"
     }

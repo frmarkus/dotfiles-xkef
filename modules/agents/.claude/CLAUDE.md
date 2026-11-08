@@ -2,4 +2,4 @@
 
 # Blocked commit trailers
 
-The `claude-no-trailer` hook blocks "Claude-Session" trailers.
+The `claude-bash-guard` hook blocks "Claude-Session" trailers.

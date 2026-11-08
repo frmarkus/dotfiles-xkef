@@ -2,12 +2,11 @@
 -- name, such as catppuccin-mocha, to $XDG_STATE_HOME/theme/current, and
 -- the palette file of that name holds the colors in Ghostty's format, so
 -- both terminals match. Watching the state file reloads the config, and
--- with it the colors, on every switch.
+-- with it the colors, on every switch. Before `theme` first runs, WezTerm
+-- keeps its own colors. `theme` alone holds the default theme.
 local wezterm = require("wezterm")
 
 local M = {}
-
-local FALLBACK_SCHEME = "Catppuccin Frappe"
 
 local CONFIG_HOME = os.getenv("XDG_CONFIG_HOME") or (wezterm.home_dir .. "/.config")
 local STATE_HOME = os.getenv("XDG_STATE_HOME") or (wezterm.home_dir .. "/.local/state")
@@ -77,7 +76,7 @@ end
 
 -- Sets the colors on config and reloads it when `theme` switches.
 function M.apply(config)
-  config.colors = theme_colors() or wezterm.color.get_builtin_schemes()[FALLBACK_SCHEME]
+  config.colors = theme_colors() or wezterm.color.get_default_colors()
 end
 
 return M

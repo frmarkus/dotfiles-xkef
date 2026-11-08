@@ -9,6 +9,13 @@ set -eu
 startup_budget=${STARTUP_BUDGET_MS:-60}
 prompt_budget=${PROMPT_BUDGET_MS:-80}
 
+# CI's lint and test job runs before any bootstrap, so it has no config to
+# time. The e2e job calls perf again after setup/bootstrap.
+if ! command -v starship >/dev/null || [ ! -e "$HOME/.config/fish/config.fish" ]; then
+  echo "perf: skipped, needs the deployed fish config and starship" >&2
+  exit 0
+fi
+
 # Prints the median wall time in milliseconds of 21 runs of a command.
 median_ms() {
   perl -MTime::HiRes=time -e '

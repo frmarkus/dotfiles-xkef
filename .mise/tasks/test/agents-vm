@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 #MISE description="Check how agents vm runs Claude Code through agentvm and feeds the picker"
+#MISE hide=true
 set -eu
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-agents-vm.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+. .mise/lib.sh
+scratch test-agents-vm
 libexec=$PWD/modules/agents/.local/libexec/agents
-
-fail() {
-  echo "$1" >&2
-  exit 1
-}
 
 # A stub agentvm, where the agentvm module installs it, records its
 # arguments one per line.
@@ -39,7 +35,7 @@ expected=$(printf '%s\n' --extends agentvm-claude --env CLAUDE_CODE_OAUTH_TOKEN=
 # --github stacks the GitHub routes and a placeholder for gh, and
 # --publish serves a port.
 "$libexec/vm-agent" shell --github --publish 3000
-grep -qx agents "$ARGV_LOG" && grep -qx GH_TOKEN=nono-proxy "$ARGV_LOG" && grep -qx shell "$ARGV_LOG" ||
+grep -qx github "$ARGV_LOG" && grep -qx GH_TOKEN=nono-proxy "$ARGV_LOG" && grep -qx shell "$ARGV_LOG" ||
   fail "--github passed: $(cat "$ARGV_LOG")"
 grep -qx -- --publish "$ARGV_LOG" && grep -qx 3000 "$ARGV_LOG" || fail "--publish passed: $(cat "$ARGV_LOG")"
 "$libexec/vm-agent" build --fresh

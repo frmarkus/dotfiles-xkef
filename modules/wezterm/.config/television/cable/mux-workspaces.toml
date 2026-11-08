@@ -1,5 +1,8 @@
 # WezTerm workspace picker. mux-workspaces opens it and acts on the choice.
 # Each row reads "display<TAB>name<TAB>path". Ctrl-S cycles the sources.
+# Each entry reaches the shell in single quotes with ' rewritten as '\'',
+# which keeps $(...) and quotes in names inert. fish reads backslashes
+# inside single quotes, so the commands that carry an entry pin bash.
 [metadata]
 name = "mux-workspaces"
 description = "WezTerm workspaces, zoxide directories, and a directory search"
@@ -16,7 +19,8 @@ no_sort = true
 display = "{split:\\t:0}"
 
 [preview]
-command = "mux-workspaces preview '{split:\\t:1}' '{split:\\t:2}'"
+command = "mux-workspaces preview '{split:\\t:1|replace:s/'/'\\''/g}' '{split:\\t:2|replace:s/'/'\\''/g}'"
+shell = "bash"
 
 [ui]
 ui_scale = 80
@@ -36,5 +40,6 @@ ctrl-w = ["actions:kill", "reload_source"]
 
 [actions.kill]
 description = "Close every pane of the workspace"
-command = "mux-workspaces kill '{split:\\t:1}'"
+command = "mux-workspaces kill '{split:\\t:1|replace:s/'/'\\''/g}'"
+shell = "bash"
 mode = "fork"

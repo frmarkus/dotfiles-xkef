@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Check that a failed cask warns and a failed formula fails"
+#MISE hide=true
 set -eu
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-packages.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
-
-fail() {
-  echo "$1" >&2
-  exit 1
-}
+. .mise/lib.sh
+scratch test-packages
 
 # Stubs make the installer take the macOS path. `brew bundle check`
 # reports every list incomplete, and brew fails on the list whose file

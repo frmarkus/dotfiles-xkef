@@ -23,7 +23,7 @@ chmod -R a-w "$dotfiles"
 # the same versions. Only for that write does the file take one.
 chmod u+w "$dotfiles/modules/core/.config/lazyvim/lazy-lock.json"
 runuser -u "$user" -- env HOME="$home" USER="$user" bash -euxo pipefail -c '
-  curl -fsSL https://claude.ai/install.sh | bash -s -- latest
+  curl -fsSL https://claude.ai/install.sh | bash -s -- 2.1.319
   fish --no-config "$1/setup/apply"
   "$HOME/.local/libexec/agents/agent-skills" ensure claude
   # The VM throws its disk away, and lazy.nvim writes its lockfile after

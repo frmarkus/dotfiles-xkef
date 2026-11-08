@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Audit the GitHub workflows with zizmor"
+#MISE hide=true
 set -eu
 
 # zizmor rejects an empty token, which agent sandboxes set. Without a

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Load the WezTerm config headless. Needs wezterm."
+#MISE hide=true
 set -eu
+. .mise/lib.sh
 
 if ! command -v wezterm >/dev/null; then
   echo "lint:wezterm: skipped, needs wezterm" >&2
@@ -10,10 +12,9 @@ fi
 # WezTerm exits 0 on a config error and falls back to its defaults, so the
 # task fails on the logged ERROR instead. The config loads once without the
 # agents package and once with it, which ~/.local/bin/agents marks.
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/wezterm.XXXXXX")
-trap 'rm -r "$scratch"' EXIT
+scratch lint-wezterm
 for agents in false true; do
-  home=$(mktemp -d "$scratch/XXXXXX")
+  home=$(mktemp -d "$tmp/XXXXXX")
   mkdir -p "$home/.config/wezterm" "$home/.local/bin"
   cp modules/wezterm/.config/wezterm/*.lua "$home/.config/wezterm"
   if [ "$agents" = true ]; then

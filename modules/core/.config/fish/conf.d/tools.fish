@@ -8,6 +8,16 @@ status is-interactive; or return
 # __cached_init sources each init script from a cache, so a start spawns
 # none of these tools.
 __cached_init starship init fish --print-full-init
+
+# Feeds the starship env_var modules, so the prompt spawns no shell for
+# the directory name or the agent VM mark.
+test -e /etc/agentvm; and set -gx PROMPT_AGENTVM 1
+
+function __prompt_dirname --on-variable PWD
+    set -gx PROMPT_DIRNAME (path basename -- $PWD)
+end
+__prompt_dirname
+
 __cached_init zoxide init fish --cmd z
 
 # A new pane or session starts in its directory without a cd, so the PWD

@@ -20,10 +20,10 @@ switch $argv[1]
         and dots apply $argv[2..-1]
     case diff
         # @key dots :: diff :: Show pending link changes (setup/apply --dry-run)
-        $DOTFILES_DIR/setup/apply --dry-run
+        $DOTFILES_DIR/setup/apply --dry-run $argv[2..-1]
     case apply
         # @key dots :: apply :: Apply the repo to this machine (setup/apply)
-        $DOTFILES_DIR/setup/apply
+        $DOTFILES_DIR/setup/apply $argv[2..-1]
     case ref
         # @key dots :: ref :: Show keybindings, aliases, functions, and commands
         dots-ref $argv[2..-1]

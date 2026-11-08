@@ -1,10 +1,9 @@
 name: CI
 
-# lint runs `mise run lint` without the editor and terminal checks,
-# which skip without their tools. check runs `mise run check`, which
-# links each module selection into a throwaway HOME and asserts the
-# result, and `mise run test`, the behavior tests. The e2e jobs run
-# .github/scripts/e2e, which bootstraps the runner as a new machine.
+# ci runs `mise run ci`, the command a committer runs. Its editor,
+# terminal, and perf checks skip without their tools or a deployed
+# config. The e2e jobs run .github/scripts/e2e, which bootstraps the
+# runner as a new machine and runs those checks for real.
 on:
   pull_request:
   push:
@@ -24,25 +23,7 @@ env:
   PROMPT_BUDGET_MS: 160
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
-        with:
-          egress-policy: audit
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
-      - name: Install fish
-        run: sudo apt-get update && sudo apt-get install -y fish
-      - name: Lint
-        env:
-          GH_TOKEN: ${{ github.token }} # zizmor's online audits query GitHub
-        run: mise run lint
-
-  check:
+  ci:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -60,14 +41,14 @@ jobs:
       # The nono test skips without nono, so macOS installs it.
       - name: Install fish
         run: if [ "$RUNNER_OS" = Linux ]; then sudo apt-get update && sudo apt-get install -y fish; else brew install fish nono; fi
-      - name: Apply into throwaway HOME
-        run: mise run check
       # The dots test runs jj in a scratch repo outside this checkout, where
       # the mise shim finds a jj version only in the global config.
-      - name: Behavior tests
-        run: |
-          mise use -g jj@0.46.0
-          mise run test
+      - name: Install jj
+        run: mise use -g jj@0.46.0
+      - name: Run CI tasks
+        env:
+          GH_TOKEN: ${{ github.token }} # zizmor's online audits query GitHub
+        run: mise run ci
 
   e2e-macos:
     runs-on: macos-latest
@@ -78,7 +59,7 @@ jobs:
           persist-credentials: false
       - name: Bootstrap and verify
         env:
-          GITHUB_TOKEN: ${{ github.token }} # mise version lookups rate-limit without it
+          MISE_GITHUB_TOKEN: ${{ github.token }} # mise version lookups rate-limit without it
         run: .github/scripts/e2e
 
   e2e-arch:
@@ -95,5 +76,5 @@ jobs:
           persist-credentials: false
       - name: Bootstrap and verify
         env:
-          GITHUB_TOKEN: ${{ github.token }} # mise version lookups rate-limit without it
+          MISE_GITHUB_TOKEN: ${{ github.token }} # mise version lookups rate-limit without it
         run: .github/scripts/e2e

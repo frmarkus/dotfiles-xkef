@@ -1,18 +1,42 @@
 #!/usr/bin/env bash
 #MISE description="Add files under $HOME to private/home.tar.age for setup/private/decrypt"
-#USAGE arg "<file>..." help="Absolute paths under $HOME, such as ~/.config/git/identity"
+#USAGE arg "[file]..." help="Absolute paths under $HOME, such as ~/.config/git/identity"
 # Adding to an existing archive decrypts it first, with the age key in
-# 1Password.
+# 1Password. It signs the archive with git's signing key, which
+# decrypt checks against private/allowed_signers. Without files it only
+# signs the archive again.
 set -euo pipefail
 umask 077
+. .mise/lib.sh
+. setup/private/archive.sh
 
 archive=private/home.tar.age
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/encrypt.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+
+# A classical X25519 recipient leaves the archive open to an attacker who
+# stores it now and decrypts it once a quantum computer exists.
+if grep -v -e '^#' -e '^$' private/recipients | grep -qv '^age1pq1'; then
+  fail "encrypt: private/recipients has a recipient that isn't post-quantum, age1pq1"
+fi
+scratch encrypt
 mkdir "$tmp/home"
 
+# git names the key by its path or as key:: and the public key, which
+# ssh-keygen reads from a file. With a public key, the agent signs.
+signing_key=$(git config --get user.signingkey) ||
+  fail "encrypt: git has no user.signingkey to sign the archive with"
+if [[ "$signing_key" == key::* ]]; then
+  printf '%s\n' "${signing_key#key::}" >"$tmp/signing.pub"
+  signing_key=$tmp/signing.pub
+fi
+
+# An archive with a bad signature would get this key's signature next.
+# One from before signing has none yet.
 if [[ -e "$archive" ]]; then
-  age --decrypt --identity <(op read op://Dev/dotfiles-age-key/password) "$archive" |
+  if [[ -e "$archive.sig" ]] && ! verify_archive "$archive" .; then
+    fail "encrypt: $archive fails its signature check against private/allowed_signers"
+  fi
+  key=$(op read "$key_ref" 2>/dev/null) || fail "encrypt: no age key at $key_ref"
+  age --decrypt --identity <(printf '%s\n' "$key") "$archive" |
     tar -xzf - -C "$tmp/home"
 fi
 
@@ -20,14 +44,12 @@ fi
 for file in "$@"; do
   relative=${file#"$HOME"/}
   if [[ "$relative" == "$file" || "/$relative/" == */../* ]]; then
-    echo "encrypt: $file is not an absolute path under \$HOME" >&2
-    exit 1
+    fail "encrypt: $file is not an absolute path under \$HOME"
   fi
   # A link points into the repo, which owns that path. The archive only
   # adds files at the include points the configs read.
   if [[ -L "$file" ]]; then
-    echo "encrypt: $file is a link; the archive only adds files" >&2
-    exit 1
+    fail "encrypt: $file is a link; the archive only adds files"
   fi
 
   mkdir -p "$tmp/home/$(dirname "$relative")"
@@ -40,4 +62,6 @@ done
 COPYFILE_DISABLE=1 tar --format pax --no-xattrs -cf - -C "$tmp/home" . |
   gzip -n |
   age --encrypt --recipients-file private/recipients --output "$tmp/archive"
+ssh-keygen -Y sign -n "$signature_namespace" -f "$signing_key" <"$tmp/archive" >"$tmp/archive.sig"
 mv "$tmp/archive" "$archive"
+mv "$tmp/archive.sig" "$archive.sig"

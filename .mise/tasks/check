@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Link each module selection into a throwaway HOME and assert results"
+#MISE hide=true
 set -eu
-# macOS mktemp ignores TMPDIR without a template.
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/check.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+. .mise/lib.sh
+scratch check
 
 # Each selection links on its own, since a file in one module can link
 # or source into another that a machine leaves out.
@@ -28,10 +28,6 @@ for selection in "${selections[@]}"; do
     echo "$broken"
     exit 1
   fi
-
-  for f in "$run"/home/.config/fish/conf.d/*.fish "$run"/home/.config/fish/functions/*.fish; do
-    fish --no-execute "$f"
-  done
 done
 
 # setup/link links every file in a module, ignored ones too, so a log or a

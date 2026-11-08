@@ -5,7 +5,10 @@
       "forbidden-exec-sugid"
     ]
   },
-  "extends": "agents",
+  "extends": [
+    "agents",
+    "agentvm-claude"
+  ],
   "filesystem": {
     "allow": [
       "$HOME/.claude",
@@ -51,17 +54,6 @@
     "description": "Claude Code with mise, jj, maven, npm, cargo, and shared skills. Its login comes from the credential proxy, and the keychain stays denied",
     "name": "claude",
     "version": "2.0.0"
-  },
-  "network": {
-    "credentials": ["claude"],
-    "custom_credentials": {
-      "claude": {
-        "upstream": "https://api.anthropic.com",
-        "credential_key": "claude_code_oauth_token",
-        "env_var": "CLAUDE_CODE_OAUTH_TOKEN",
-        "credential_format": "Bearer {}"
-      }
-    }
   },
   "open_urls": {
     "allow_localhost": true,

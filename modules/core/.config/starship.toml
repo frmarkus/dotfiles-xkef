@@ -1,8 +1,8 @@
 command_timeout = 1000
 
 format = """
-${custom.agentvm}\
-${custom.cwd}\
+${env_var.PROMPT_AGENTVM}\
+${env_var.PROMPT_DIRNAME}\
 $character"""
 
 right_format = """
@@ -80,18 +80,13 @@ modified = '[!${count}](red) '
 renamed = '[»${count}](yellow) '
 
 # The shield that WezTerm and the picker put on agent VM panes, in the
-# VM itself, which the image marks with /etc/agentvm.
-[custom.agentvm]
-when = 'test -e /etc/agentvm'
-shell = ['sh']
+# VM itself, which the image marks with /etc/agentvm. Fish sets these
+# variables in tools.fish, because a custom module spawns a shell on every
+# prompt.
+[env_var.PROMPT_AGENTVM]
 symbol = ' '
 style = 'bold yellow'
 format = '[$symbol]($style)'
 
-# Without `shell`, starship runs the command in $STARSHIP_SHELL, and a
-# fish start costs about 80ms on every prompt. sh costs about 3ms.
-[custom.cwd]
-command = 'basename "$PWD"'
-when = true
-shell = ['sh']
-format = '[$output](bold cyan) '
+[env_var.PROMPT_DIRNAME]
+format = '[$env_value](bold cyan) '

@@ -1,7 +1,4 @@
-local ok, theme = pcall(require, "theme")
-if ok and type(theme.setup) == "function" then
-  theme.setup()
-end
+require("theme").setup()
 
 -- Show markdown as plain highlighted text. LazyVim's global conceallevel
 -- hides emphasis markers and link targets.

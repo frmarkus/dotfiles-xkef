@@ -1,5 +1,9 @@
 # Zoxide directories for the fish Alt-Z binding, which cds to the choice.
 # Upstream's zoxide channel opens a subshell on Enter, so fish can't use it.
+#
+# Each entry reaches the shell in single quotes with ' rewritten as '\'',
+# which keeps $(...) and quotes in names inert. fish reads backslashes
+# inside single quotes, so the commands that carry an entry pin bash.
 [metadata]
 name = "zoxide-cd"
 description = "Visited directories, printed for the shell to cd into"
@@ -10,11 +14,13 @@ command = "zoxide query --list"
 no_sort = true
 
 [preview]
-command = "eza -T --color=always --icons --level=2 '{}'"
+command = "eza -T --color=always --icons --level=2 '{replace:s/'/'\\''/g}'"
+shell = "bash"
 
 [keybindings]
 alt-d = ["actions:remove", "reload_source"]
 
 [actions.remove]
 description = "Remove the directory from zoxide"
-command = "zoxide remove '{}'"
+command = "zoxide remove '{replace:s/'/'\\''/g}'"
+shell = "bash"

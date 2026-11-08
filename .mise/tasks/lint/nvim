@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="Load LazyVim and kickstart headless. LazyVim needs its plugins installed."
+#MISE hide=true
 set -euo pipefail
+. .mise/lib.sh
 
 # A machine without Neovim or the LazyVim plugins has nothing to load.
 if ! command -v nvim >/dev/null || [[ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/lazyvim/lazy/lazy.nvim" ]]; then
@@ -14,8 +16,7 @@ fi
 # cache, which the sandbox doesn't grant. kickstart loads from the repo, which the sandbox reads,
 # with throwaway data and cache directories, so vim.pack installs its
 # plugins fresh, as on a new machine.
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/lint-nvim.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+scratch lint-nvim
 check='if v:errmsg != "" | cquit | else | qall | endif'
 
 NVIM_APPNAME=lazyvim XDG_STATE_HOME=$tmp/lazyvim/state XDG_CACHE_HOME=$tmp/lazyvim/cache \

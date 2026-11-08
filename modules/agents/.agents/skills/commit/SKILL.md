@@ -37,7 +37,11 @@ For more on Jujutsu, see the `jj` skill.
    generated-by attribution.
 4. **Always** show the proposed commit message to the user and wait for their
    approval before committing. They may want to edit it first. Don't run the
-   commit command until they confirm.
+   commit command until they confirm. Ask through the harness's question tool
+   when it has one, such as `AskUserQuestion` in Claude Code, with one question
+   per commit. Give each question an "Approve" option whose preview holds the
+   full message and the files. The tool's free-text answer takes an edited
+   message. Show the message as text and ask when no such tool exists.
 
 ## Commit message format
 

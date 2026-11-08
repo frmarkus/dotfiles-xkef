@@ -9,5 +9,9 @@
       "exclude": []
     }
   },
-  "rules": [{ "type": "deletion" }, { "type": "non_fast_forward" }]
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "required_signatures" }
+  ]
 }

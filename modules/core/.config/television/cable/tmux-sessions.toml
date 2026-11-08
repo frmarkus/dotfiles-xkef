@@ -1,6 +1,10 @@
 # tmux session picker. prefix f opens it in a popup. Enter connects
 # through sesh, which creates the session for a directory. Each row reads
 # "icon name", or a bare path for Find. Ctrl-S cycles the sources.
+#
+# Each entry reaches the shell in single quotes with ' rewritten as '\'',
+# which keeps $(...) and quotes in names inert. fish reads backslashes
+# inside single quotes, so the commands that carry an entry pin bash.
 [metadata]
 name = "tmux-sessions"
 description = "tmux sessions, sesh configs, zoxide directories, and a directory search"
@@ -18,7 +22,8 @@ no_sort = true
 ansi = true
 
 [preview]
-command = "sesh preview '{strip_ansi}'"
+command = "sesh preview '{strip_ansi|replace:s/'/'\\''/g}'"
+shell = "bash"
 
 [ui.input_bar]
 header = "sessions │ C-s source │ C-w kill"
@@ -35,10 +40,12 @@ ctrl-w = ["actions:kill", "reload_source"]
 
 [actions.connect]
 description = "Switch to the session, creating it if needed"
-command = "sesh connect '{strip_ansi}'"
+command = "sesh connect '{strip_ansi|replace:s/'/'\\''/g}'"
+shell = "bash"
 mode = "execute"
 
 [actions.kill]
 description = "Kill the tmux session"
-command = "tmux kill-session -t '{strip_ansi|split: :1..|join: }'"
+command = "tmux kill-session -t '{strip_ansi|split: :1..|join: |replace:s/'/'\\''/g}'"
+shell = "bash"
 mode = "fork"

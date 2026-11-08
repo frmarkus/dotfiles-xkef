@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 #MISE description="Check the agent-state transitions, list format, and cleanup"
+#MISE hide=true
 set -eu
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-agent-state.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+. .mise/lib.sh
+scratch test-agent-state
 export XDG_STATE_HOME="$tmp"
 # The tests pick the pane themselves, and tmux takes precedence.
 unset TMUX_PANE
 state=modules/agents/.local/libexec/agents/agent-state
-
-fail() {
-  echo "$1" >&2
-  exit 1
-}
 
 # Prints one field of the pane's list line: 1 pane, 2 agent, 3 state,
 # 4 tool, 5 epoch, 6 cwd, 7 task.

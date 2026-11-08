@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Check that theme records the theme and hands its palette to the hooks"
+#MISE hide=true
 set -eu
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/test-theme.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
-
-fail() {
-  echo "$1" >&2
-  exit 1
-}
+. .mise/lib.sh
+scratch test-theme
 
 # The palettes come from the repo. A stub hook records what theme passes
 # to every hook.
