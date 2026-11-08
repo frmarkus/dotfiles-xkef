@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 #MISE description="Download the vale style packages"
 set -eu
-vale --no-global --config .config/vale/.vale.ini sync
+vale --no-global --config .mise/vale/.vale.ini sync

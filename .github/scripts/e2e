@@ -47,7 +47,7 @@ for f in ~/.config/fish/config.fish ~/.config/fish/conf.d/*.fish ~/.config/fish/
 done
 ~/.local/bin/theme --current
 ~/.local/bin/dots-ref --raw | tail -3
-.config/mise/tasks/perf
+.mise/tasks/perf
 
 if [ "$(uname)" != Darwin ]; then
   exit 0

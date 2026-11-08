@@ -25,10 +25,10 @@ test ! -e "$tmp/home/.config/git/identity" || {
 # decrypt writes them back, where git picks up the identity. Copies of the
 # scripts work on a test private/ with a test key, which a stub op returns.
 repo="$tmp/repo"
-mkdir -p "$repo/setup/private" "$repo/.config/mise/tasks" "$repo/private" \
+mkdir -p "$repo/setup/private" "$repo/.mise/tasks" "$repo/private" \
   "$tmp/stub" "$tmp/home/.config/git" "$tmp/home/.ssh"
 cp setup/private/decrypt "$repo/setup/private/"
-cp .config/mise/tasks/encrypt "$repo/.config/mise/tasks/"
+cp .mise/tasks/encrypt "$repo/.mise/tasks/"
 age-keygen -o "$tmp/key" 2>/dev/null
 age-keygen -y "$tmp/key" >"$repo/private/recipients"
 printf '#!/bin/sh\ncat "%s"\n' "$tmp/key" >"$tmp/stub/op"
@@ -37,7 +37,7 @@ run() {
   (cd "$repo" && env PATH="$tmp/stub:$PATH" HOME="$tmp/home" "$@")
 }
 decrypt() { run setup/private/decrypt; }
-encrypt() { run .config/mise/tasks/encrypt "$@"; }
+encrypt() { run .mise/tasks/encrypt "$@"; }
 
 # A second encrypt adds to the archive and keeps the first file.
 identity="$tmp/home/.config/git/identity"

@@ -3,7 +3,6 @@
 
 # AI tooling
 /.claude/*
-!/.claude/settings.json
 !/.claude/skills/
 /.claude-notes/
 
@@ -18,10 +17,10 @@
 /.rumdl_cache/
 
 # `mise run vale:sync` downloads style packages next to the vocabulary
-/.config/vale/styles/*
-!/.config/vale/styles/config/
-/.config/vale/styles/config/*
-!/.config/vale/styles/config/vocabularies
+/.mise/vale/styles/*
+!/.mise/vale/styles/config/
+/.mise/vale/styles/config/*
+!/.mise/vale/styles/config/vocabularies
 
 # Type-check dependencies for the pi extensions
-/.config/pi/node_modules/
+/.mise/pi/node_modules/

@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 #MISE description="Lint markdown"
 set -eu
-rumdl check
+rumdl check --config .mise/rumdl.toml

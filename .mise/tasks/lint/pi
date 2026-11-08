@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Type-check the pi extensions. Needs node."
-#MISE dir=".config/pi"
+#MISE dir=".mise/pi"
 set -eu
 npm ci --no-audit --no-fund
 npx tsc

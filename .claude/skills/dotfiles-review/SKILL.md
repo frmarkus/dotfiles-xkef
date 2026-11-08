@@ -20,7 +20,7 @@ finding.
    - `mise run check` links the repo into a throwaway `HOME`. `mise run test`
      runs the behavior tests. `mise tasks` lists the rest.
    - Run a changed script under `HOME=$(mktemp -d)` with stub binaries first on
-     `PATH`, the way `.config/mise/tasks/test/sb` stubs nono.
+     `PATH`, the way `.mise/tasks/test/sb` stubs nono.
    - `git log -S <name>` shows when a name appeared or went away.
 4. Post each finding as an inline comment with
    `mcp__github_inline_comment__create_inline_comment` and `confirmed: true`.
@@ -59,8 +59,8 @@ Flag any change that lets a secret or a write reach an agent:
   block, or event text that reaches `run:` without `env:`.
 
 nono can't run on the CI runner. Prove a leak with a stub the way
-`.config/mise/tasks/test/sb` does, or trace the variable from where the code
-sets it to the `nono` command line.
+`.mise/tasks/test/sb` does, or trace the variable from where the code sets it to
+the `nono` command line.
 
 ## Staleness
 

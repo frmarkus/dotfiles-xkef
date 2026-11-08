@@ -7,7 +7,7 @@ set -eu
 # here. --no-global keeps a machine's own vale config out of the result.
 # The agent rules quote the phrases they ban.
 alerts=$(git ls-files -z '*.md' ':!modules/agents/.agents/AGENTS.md' ':!modules/agents/.pi/agent/AGENTS.md' ':!modules/agents/.claude/CLAUDE.md' |
-  xargs -0 vale --no-global --config .config/vale/.vale.ini --output=line 2>&1 || true)
+  xargs -0 vale --no-global --config .mise/vale/.vale.ini --output=line 2>&1 || true)
 if [ -n "$alerts" ]; then
   echo "$alerts"
   exit 1
