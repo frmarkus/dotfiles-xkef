@@ -62,8 +62,8 @@ checks the state and writes the entry for the pane of the VM only.
   `.claude/CLAUDE.md` and `.pi/agent/AGENTS.md` point to it.
 - `.agents/skills/` holds the tracked skills. `agent-skills` installs the
   upstream ones next to them.
-- `.claude/hooks/` blocks Git history rewrites in jj repositories, session
-  trailers in commits, and sandbox bypasses under nono. It also draws the status
-  line.
+- `.claude/hooks/` blocks pushes, Git history rewrites in jj repositories,
+  session trailers in commits, and sandbox bypasses under nono. It also draws
+  the status line.
 - `.config/tmux/conf.d/agents.conf` binds the picker and the agent VM in tmux.
   WezTerm's bindings live in the `wezterm` module.

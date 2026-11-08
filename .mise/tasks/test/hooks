@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+#MISE description="Check which Bash commands the Claude Code guard hook blocks"
+#MISE hide=true
+set -eu
+guard=$PWD/modules/agents/.claude/hooks/claude-bash-guard
+failed=0
+
+# The checkout is a jj repository, and / sits in none, so the jj check runs
+# without creating a repository.
+repo=$PWD
+outside=/
+
+# Built at run time, so this file doesn't trip the hook while it's edited.
+printf -v trailer '%s-%s' Claude Session
+
+# Feeds command $3 run in directory $2 to the guard, and reports a failure
+# unless the guard allows it, for $1 allow, or blocks it, for $1 block.
+expect() {
+  local want=$1 cwd=$2 command=$3 status=0
+  jq -n --arg command "$command" --arg cwd "$cwd" '{tool_input: {command: $command}, cwd: $cwd}' |
+    env -u NONO_CAP_FILE "$guard" 2>/dev/null || status=$?
+  case "$want:$status" in
+  allow:0 | block:2) ;;
+  *)
+    echo "expected $want, got exit $status: $command" >&2
+    failed=1
+    ;;
+  esac
+}
+
+for command in \
+  'git push' 'git push origin main' 'git --no-pager push' 'git -C /x push' \
+  'git -c push.default=current push' '/usr/bin/git push' 'command git push' \
+  'env GIT_TRACE=1 git push' 'exec git push' 'xargs git push' \
+  'echo main | xargs -I{} git push origin {}' 'timeout 9 git push' \
+  'GIT_TRACE=1 git push' 'git --git-dir=.git push' 'git --git-dir .git push' \
+  'sh -c "git push"' "bash -c 'cd x && git push'" 'echo $(git push)' \
+  'true; git push' 'true && git push' '\git push' 'if true; then git push; fi' \
+  'jj git push' 'jj --no-pager git push' 'jj -R . git push' \
+  'jj --repository=. git push' 'jj git --quiet push -b main' \
+  '/opt/homebrew/bin/jj git push' 'env jj git push' \
+  'jj util exec -- git push' 'jj util exec -- sh -c "jj git push"' \
+  "jj --config 'aliases.p=[\"git\", \"push\"]' p" \
+  'git -c alias.p=push p'; do
+  expect block "$outside" "$command"
+done
+
+for command in \
+  "git commit -m x --trailer '$trailer: 1'" "git commit -m 'x' -m '$trailer = 1'" \
+  "jj describe -m \"x
+
+$trailer: 1\""; do
+  expect block "$outside" "$command"
+done
+
+for command in 'jj diff --tool x' 'jj show --tool=x' 'jj --config ui.pager=x log' \
+  'jj log --config=ui.pager=x' 'jj diff --config-toml x' 'jj --config-file x.toml st'; do
+  expect block "$outside" "$command"
+done
+
+for command in 'git commit -m x' 'git -C . rebase main' 'git stash' \
+  'git checkout -b x' 'env git reset --hard' 'cd x && git add .'; do
+  expect block "$repo" "$command"
+done
+
+for command in 'git log' 'git show HEAD' 'git status' 'git diff' \
+  'git log --oneline | head' 'jj log' 'jj log -r @' 'jj diff -r @-' 'jj st' 'jj git fetch' 'jj git remote list' \
+  'jj describe -m "fix the git commit hook"' 'rg -n pushd' 'echo hello' \
+  "echo $trailer" 'git commit -m x' 'git pushy'; do
+  # git commit passes only outside a jj repository.
+  expect allow "$outside" "$command"
+done
+for command in 'git log' 'git show HEAD' 'jj log' 'rg "git add" .' \
+  'jj describe -m "drop git stash"'; do
+  expect allow "$repo" "$command"
+done
+
+# dangerouslyDisableSandbox passes without nono and blocks under it.
+input='{"tool_input": {"command": "ls", "dangerouslyDisableSandbox": true}}'
+printf '%s' "$input" | env -u NONO_CAP_FILE "$guard" 2>/dev/null || {
+  echo "dangerouslyDisableSandbox blocked without nono" >&2
+  failed=1
+}
+status=0
+printf '%s' "$input" | NONO_CAP_FILE=/x "$guard" 2>/dev/null || status=$?
+[ "$status" = 2 ] || {
+  echo "dangerouslyDisableSandbox passed under nono" >&2
+  failed=1
+}
+
+[ "$failed" = 0 ] || exit 1
+echo "hooks ok"

@@ -43,15 +43,7 @@
       {
         "hooks": [
           {
-            "command": "~/.claude/hooks/claude-no-trailer",
-            "type": "command"
-          },
-          {
-            "command": "~/.claude/hooks/claude-nono-guard",
-            "type": "command"
-          },
-          {
-            "command": "~/.claude/hooks/claude-jj-guard",
+            "command": "~/.claude/hooks/claude-bash-guard",
             "type": "command"
           }
         ],
@@ -122,7 +114,21 @@
       "Edit",
       "Write",
       "Skill",
-      "Bash(jj *)",
+      "Bash(jj log *)",
+      "Bash(jj diff *)",
+      "Bash(jj st *)",
+      "Bash(jj status *)",
+      "Bash(jj show *)",
+      "Bash(jj file list *)",
+      "Bash(jj file show *)",
+      "Bash(jj op log *)",
+      "Bash(jj evolog *)",
+      "Bash(jj bookmark list *)",
+      "Bash(jj workspace list *)",
+      "Bash(jj root *)",
+      "Bash(jj help *)",
+      "Bash(jj config get *)",
+      "Bash(jj config list *)",
       "WebSearch",
       "WebFetch(domain:docs.claude.com)",
       "WebFetch(domain:code.claude.com)",

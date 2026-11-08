@@ -1,0 +1,150 @@
+#!/bin/bash
+# Refuses Bash tool calls that the agent must leave to the user:
+#
+# - git push and jj git push in any form. The user pushes.
+# - A Claude-Session trailer in a commit message. The harness tells the
+#   agent to append it, and an instruction in CLAUDE.md only competes with
+#   that.
+# - A Git command that changes history or the working copy inside a jj
+#   repository. In a colocated repository Git works too, so agents reach for
+#   the Git commands they know, and jj then sees a rewritten history it
+#   didn't make. Read-only commands such as `git show` and `git log` pass.
+# - dangerouslyDisableSandbox under nono. sb turns Claude Code's own sandbox
+#   off inside nono, so the flag lifts nothing there. nono still blocks the
+#   command, and the auto-mode classifier may deny the attempt.
+#
+# A hook blocks at the tool boundary, which no prompt can talk its way past.
+#
+# The command splits into words on whitespace, quotes, and brackets, and
+# into commands on shell separators. Quoting then hides nothing: the words
+# of `sh -c "git push"`, of `jj util exec -- git push`, and of a TOML alias
+# `["git", "push"]` read as git followed by push. A push counts wherever
+# git or jj stands in a command, behind any wrapper such as env, xargs, or
+# timeout, at the cost of blocking a command that only mentions one, such
+# as `rg "git push"`. The jj check takes only a git at command position,
+# since a message or a search pattern often names a Git command.
+#
+# A Git alias in a repository's .git/config, which the agent can write, can
+# still run a push under another name. The nono profiles can't make that
+# file read-only.
+
+readonly JJ_MUTATING=' add am branch checkout cherry-pick clean commit merge pull push rebase reset restore revert rm stash switch tag '
+
+# Words that leave the next word at command position. Options and VAR=value
+# assignments do too.
+readonly PREFIXES=' ! builtin command do doas elif else env exec if nice nohup sudo then time until while xargs '
+
+readonly PUSH_MESSAGE="the user pushes. Hand the push command to the user instead."
+
+# Built at run time, so a command that writes this file doesn't match.
+printf -v TRAILER '%s-%s' Claude Session
+readonly TRAILER
+readonly TRAILER_PATTERN="${TRAILER}[[:space:]]*[:=]"
+
+block() {
+  echo "Blocked: $1" >&2
+  exit 2
+}
+
+eval "$(jq -r '
+  @sh "COMMAND=\(.tool_input.command // "")",
+  @sh "CWD=\(.cwd // "")",
+  @sh "UNSANDBOXED=\(.tool_input.dangerouslyDisableSandbox == true)"
+')"
+
+if [ -n "${NONO_CAP_FILE:-}" ] && [ "$UNSANDBOXED" = true ]; then
+  block "nono confines this session, and dangerouslyDisableSandbox has no effect under it. Hand the command to the user for a separate terminal."
+fi
+
+[ -n "$COMMAND" ] || exit 0
+
+if [[ "$COMMAND" =~ $TRAILER_PATTERN ]]; then
+  block "commit messages never carry a $TRAILER trailer. Remove it and retry."
+fi
+
+# Sets NEXT to the index of the first word from index $2 on that isn't a
+# global option of program $1, git or jj. The options listed take their
+# value as the next word.
+skip_options() {
+  NEXT=$2
+  while [ "$NEXT" -lt "${#WORDS[@]}" ]; do
+    case "$1:${WORDS[NEXT]}" in
+    git:-C | git:-c | git:--git-dir | git:--work-tree | git:--namespace | \
+      git:--config-env | git:--super-prefix | jj:-R | jj:--repository | \
+      jj:--at-op | jj:--at-operation | jj:--color | jj:--config | \
+      jj:--config-toml | jj:--config-file)
+      NEXT=$((NEXT + 2))
+      ;;
+    *:-*) NEXT=$((NEXT + 1)) ;;
+    *) return ;;
+    esac
+  done
+}
+
+# Runs jj at most once per call, and only for a mutating Git command.
+in_jj_repo() {
+  if [ -z "${JJ_REPO:-}" ]; then
+    JJ_REPO=no
+    if jj --ignore-working-copy root -R "${CWD:-.}" >/dev/null 2>&1; then
+      JJ_REPO=yes
+    fi
+  fi
+  [ "$JJ_REPO" = yes ]
+}
+
+# Checks the words of one command in WORDS.
+check_command() {
+  local i j word program subcommand at_command=1
+  for ((i = 0; i < ${#WORDS[@]}; i++)); do
+    word=${WORDS[i]}
+    program=${word##*/}
+    if [ "$program" != git ] && [ "$program" != jj ]; then
+      if [[ "$word" != *=* && "$word" != -* && "$PREFIXES" != *" $word "* ]]; then
+        at_command=0
+      fi
+      continue
+    fi
+
+    skip_options "$program" $((i + 1))
+    subcommand=${WORDS[NEXT]:-}
+
+    # The settings allow read-only jj commands without a prompt, and --tool
+    # or a config option there runs any program as a diff tool, formatter,
+    # or pager.
+    if [ "$program" = jj ]; then
+      for ((j = i + 1; j < ${#WORDS[@]}; j++)); do
+        case ${WORDS[j]} in
+        --tool | --tool=* | --config*)
+          block "jj with --tool or a config option can run any program. Run the jj command without it."
+          ;;
+        esac
+      done
+      if [ "$subcommand" = git ]; then
+        skip_options jj $((NEXT + 1))
+        [ "${WORDS[NEXT]:-}" != push ] || block "$PUSH_MESSAGE"
+      fi
+      at_command=0
+      continue
+    fi
+
+    [ "$subcommand" != push ] || block "$PUSH_MESSAGE"
+    for ((j = i + 1; j < NEXT; j++)); do
+      if [ "${WORDS[j]}" = -c ] && [[ "${WORDS[j + 1]:-}" == alias.* ]]; then
+        block "a Git alias on the command line can hide a push. Run the Git command itself."
+      fi
+    done
+    if ((at_command)) && [[ "$JJ_MUTATING" == *" $subcommand "* ]] && in_jj_repo; then
+      block "this is a jj repository. Use the jj equivalent, such as jj commit, jj rebase, or jj bookmark. Git stays read-only here."
+    fi
+    at_command=0
+  done
+}
+
+flat=${COMMAND//\\/}
+flat=${flat//[\"\'\[\],<>]/ }
+flat=${flat//[;&|()\`\{\}]/$'\n'}
+while read -r -a WORDS; do
+  check_command
+done <<<"$flat"
+
+exit 0
