@@ -67,8 +67,10 @@ set -gx LESSUTFCHARDEF 'e000-f8ff:p,f0000-ffffd:p'
 # One call in priority order. -m moves entries already in an inherited
 # PATH, so a shell started from tmux or WezTerm gets the same order.
 # Homebrew keeps rustup keg-only, so cargo and rustc need its opt path.
+# It keeps curl keg-only too. macOS's own curl links LibreSSL 3.3, which
+# has no ML-KEM, so its TLS key exchange is classical.
 set -l paths $HOME/.local/bin $CARGO_HOME/bin $GOPATH/bin
 if set -q HOMEBREW_PREFIX
-    set -a paths $HOMEBREW_PREFIX/opt/rustup/bin $HOMEBREW_PREFIX/bin $HOMEBREW_PREFIX/sbin
+    set -a paths $HOMEBREW_PREFIX/opt/rustup/bin $HOMEBREW_PREFIX/opt/curl/bin $HOMEBREW_PREFIX/bin $HOMEBREW_PREFIX/sbin
 end
 fish_add_path -gPm $paths /usr/local/bin
