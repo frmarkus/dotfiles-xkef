@@ -148,3 +148,11 @@ jj git fetch "$@" && jj rebase -o 'trunk()' -s 'roots(trunk()..mutable()) & chil
 
 [user]
 name = "Markus Frauenfelder"
+email = "frmarkus@gmail.com"
+
+# jj can't match on the remote URL like the includeIf of ~/.gitconfig, so
+# the folder decides: Bitbucket clones of Netcetera live under ~/bitbucket.
+[[--scope]]
+--when.repositories = ["~/bitbucket"]
+[--scope.user]
+email = "markus.frauenfelder@netcetera.com"
