@@ -16,7 +16,8 @@
       "$HOME/.local/state/claude/locks",
       "$HOME/.cache/claude",
       "$HOME/.config/nono/profile-drafts",
-      "/tmp/claude-$UID"
+      "/tmp/claude-$UID",
+      "$HOME/.tmp/claude-$UID"
     ],
     "allow_file": [
       "$HOME/.claude.json",
