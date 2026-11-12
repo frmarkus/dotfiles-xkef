@@ -130,6 +130,12 @@ end
 function step_macos
     selected desktop; and test (uname -s) = Darwin; or return 0
     $repo/setup/macos-defaults --dry-run >/dev/null; and return
+
+    # The defaults need sudo, which only members of the admin group have.
+    if not contains admin (id -Gn | string split ' ')
+        echo "warning: $USER is not an admin, skipping the macOS defaults" >&2
+        return 0
+    end
     $repo/setup/macos-defaults
 end
 
@@ -149,6 +155,10 @@ function step_shell
     test "$fish" = "$login"; and return
 
     if not grep -qxF $fish /etc/shells
+        if test (uname -s) = Darwin; and not contains admin (id -Gn | string split ' ')
+            echo "warning: $USER is not an admin, so $fish stays out of /etc/shells and the login shell stays" >&2
+            return 0
+        end
         echo $fish | sudo tee -a /etc/shells >/dev/null; or return
     end
     switch (uname -s)

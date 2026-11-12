@@ -145,3 +145,6 @@ jj git fetch "$@" && jj rebase -o 'trunk()' -s 'roots(trunk()..mutable()) & chil
 """,
   "",
 ]
+
+[user]
+name = "Markus Frauenfelder"

@@ -31,6 +31,13 @@ confirm-close-surface = false
 cursor-style = bar
 cursor-style-blink = false
 shell-integration-features = cursor,sudo,title,ssh-env
+
+# Starts fish even where the login shell stays zsh, as on a macOS account
+# without admin rights, which can't change /etc/shells. fish then runs
+# conf.d/ghostty.fish, which attaches tmux. The absolute path avoids the
+# minimal PATH of an app started from the Dock. Homebrew's location is
+# macOS only.
+command = /opt/homebrew/bin/fish
 # Smears the cursor along its jump, as Neovide's animated cursor does.
 custom-shader = ~/.config/ghostty/shaders/cursor_smear.glsl
 
