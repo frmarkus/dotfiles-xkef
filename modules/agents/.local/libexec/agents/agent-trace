@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
 # Reports the tool calls that failed in Claude Code sessions, read in place
-# from ~/.claude/projects on this machine and from the agent VM's
-# transcripts on the host.
+# from ~/.claude/projects on this machine.
 #
 #   agent-trace [--all] [--since <date>] list
 #   agent-trace [--all] [--since <date>] errors [session-id]
 #   agent-trace [--all] [--since <date>] denials [session-id]
-#   agent-trace [--all] [--since <date>] sandbox
 #   agent-trace [--all] [--since <date>] prompts [session-id]
 #   agent-trace [--all] [--since <date>] corrections [session-id]
-#   agent-trace record
-#   agent-trace collect
 #
 # The scope is the sessions that ran inside the current repository, or
 # every session with --all. A session id picks that one session wherever
 # it ran. --since drops what happened before an ISO 8601 date, such as
-# 2026-09-26, so a restructured repository reports on its current layout. Every row names its environment: this machine's host name, or
-# agentvm. The two differ in sandbox and permissions. Here nono confines
-# the agent and prompts guard its tools. In the agent VM the VM confines
-# it and prompts stay off.
+# 2026-09-26, so a restructured repository reports on its current layout.
+# Every row names its environment: this machine's host name.
 #
 # `list` prints id, environment, start, permission mode, error count,
 # denial count, and title per session. `errors` prints session,
@@ -31,18 +25,9 @@
 # agent's last reply, and the message per prompt the user typed. The reply
 # shows what a correction answers. `corrections` keeps the prompts whose
 # wording reads like a correction, such as "no", "don't", or "again".
-#
-# `sandbox` prints nono session, profile, start, workdir, count, process,
-# operation, and path per distinct Seatbelt denial, most frequent first.
-# It covers the denials a tool never reported, such as a config file git
-# skips without a word. macOS records them in its unified log, which only
-# an unsandboxed process may read, so `sb` runs `record` while the agent
-# runs and `collect` after it exits, and the report reads that cache.
 set -euo pipefail
 
 readonly CLAUDE_PROJECTS="$HOME/.claude/projects"
-readonly AGENTS_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/agents"
-readonly VM_GUEST_MARKER=/etc/agentvm
 readonly OS_DENIAL_PATTERN='operation not permitted|permission denied|read-only file system|\beperm\b|\beacces\b|sandbox[ _-]?(apply|blocked|denied)'
 # Claude Code's own refusals: permission rules, the auto mode classifier,
 # user rejections, and PreToolUse hooks.
@@ -51,12 +36,6 @@ readonly DENIAL_PATTERN="$OS_DENIAL_PATTERN|$CLAUDE_DENIAL_PATTERN"
 readonly MAX_FIELD_LENGTH=200
 readonly MAX_PROMPT_LENGTH=800
 readonly CORRECTION_PATTERN='(^|[^a-z])(no[,. ]|don.?t|never|stop|wrong|instead|why did|i said|again|revert|undo|not what|should|always)'
-readonly NONO_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/nono"
-readonly SANDBOX_CACHE="$AGENTS_STATE/sandbox"
-readonly SANDBOX_STREAMS="$SANDBOX_CACHE/streams"
-# Keeps file, execution, and network denials, so the many daemon denials
-# never reach jq.
-readonly SEATBELT_PREDICATE='sender == "Sandbox" AND (eventMessage CONTAINS " file-" OR eventMessage CONTAINS " process-exec" OR eventMessage CONTAINS " network-")'
 
 # Emits one JSON object per failed tool call in a transcript. It pairs each
 # error result with the tool call that caused it, and picks the first line
@@ -108,23 +87,6 @@ readonly PROMPTS_JQ='
 '
 readonly MACHINE_PROMPT='^\s*(<command-|<local-command|<system-reminder>|<task-notification>|Caveat:|\[Request interrupted)'
 
-# Groups the Seatbelt denials of one nono session. The log names only the
-# process and its PID, so a denial counts when its PID is no older than the
-# sandboxed child. A line such as "3 duplicate reports for Sandbox: ..."
-# adds its count. The stream opens with a line that isn't JSON.
-readonly SEATBELT_JQ='
-  [inputs
-    | fromjson?
-    | .eventMessage // empty
-    | capture("^(?:(?<dup>[0-9]+) duplicate reports? for )?Sandbox: (?<proc>.+)\\((?<pid>[0-9]+)\\) deny\\([0-9]+\\) (?<op>[^ ]+) ?(?<path>.*)$")
-    | select((.pid | tonumber) >= $s.child_pid)
-    | select(.op | test("^(file-|process-exec|network-)"))
-    | {proc, op, path, n: ((.dup // "1") | tonumber)}]
-  | group_by([.proc, .op, .path])[]
-  | [$s.session_id, $s.profile, $s.started, $s.workdir, (map(.n) | add), .[0].proc, .[0].op, .[0].path]
-  | @tsv
-'
-
 scope=repo
 since=""
 
@@ -142,26 +104,14 @@ repo_root() {
   jj --ignore-working-copy root 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null
 }
 
-# Prints "<environment>\t<projects directory>" per transcript source. The
-# agent VM keeps each repository's transcripts in a host directory that
-# the VM mounts over its ~/.claude/projects, so the host reads them as
-# agentvm. Inside the guest that directory is the local source already.
+# Prints "<environment>\t<projects directory>" per transcript source.
 sources() {
-  local dir
   printf '%s\t%s\n' "$(uname -n)" "$CLAUDE_PROJECTS"
-  [ -e "$VM_GUEST_MARKER" ] && return
-
-  for dir in "${XDG_STATE_HOME:-$HOME/.local/state}"/agentvm/{copies/*,shell}/home/.claude/projects; do
-    [ -d "$dir" ] && printf 'agentvm\t%s\n' "$dir"
-  done
-  return 0
 }
 
 # Prints "<environment>\t<transcript>" per session in scope. Claude names
 # each project directory after the session's cwd with every character
-# outside [A-Za-z0-9] turned into "-". `agentvm` keeps a repository at
-# its host path in the guest, so it gets the same name in both
-# environments. A prefix match finds the sessions started in
+# outside [A-Za-z0-9] turned into "-". A prefix match finds the sessions started in
 # subdirectories too, and the recorded cwd drops the unrelated directories
 # that share the prefix.
 transcripts() {
@@ -248,73 +198,6 @@ list() {
   done | sort -t $'\t' -k3
 }
 
-# Keeps the denial rows of programs the agent can run. System daemons that
-# start during a long session pass the PID check, but they live outside
-# PATH. The Claude binary runs under its version number, such as 2.1.283.
-own_processes() {
-  local row proc
-  while IFS= read -r row; do
-    proc=$(cut -f6 <<<"$row")
-    if command -v "$proc" >/dev/null || [[ "$proc" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-      echo "$row"
-    fi
-  done
-}
-
-# Streams the Seatbelt denials to a file named after its start time and
-# its own PID until `sb` stops it. The log daemon filters the events as
-# they arrive, so the cost follows the denials, not the log volume.
-record() {
-  [ "$(uname -s)" = Darwin ] || return 0
-  mkdir -p "$SANDBOX_STREAMS"
-  exec /usr/bin/log stream --style ndjson --predicate "$SEATBELT_PREDICATE" \
-    >"$SANDBOX_STREAMS/$(date +%Y-%m-%dT%H:%M:%S).$$.ndjson" 2>/dev/null
-}
-
-# Caches the Seatbelt denials of every finished nono session not cached
-# yet that started while a stopped stream ran, then drops the stream. An
-# empty cache file marks a session without denials.
-collect() {
-  local stream name session id started ended tmp
-  [ "$(uname -s)" = Darwin ] || return 0
-  mkdir -p "$SANDBOX_CACHE"
-
-  for stream in "$SANDBOX_STREAMS"/*.ndjson; do
-    [ -f "$stream" ] || continue
-    name=$(basename "$stream" .ndjson)
-    kill -0 "${name##*.}" 2>/dev/null && continue
-
-    for session in "$NONO_STATE"/sessions/*.json; do
-      id=$(basename "$session" .json)
-      [ -f "$SANDBOX_CACHE/$id.tsv" ] && continue
-      ended=$(jq -r '.ended // empty' "$NONO_STATE/audit/$id/session.json" 2>/dev/null) || continue
-      started=$(jq -r .started "$session")
-      if [ -z "$ended" ] || [[ "${started:0:19}" < "${name%.*}" ]]; then
-        continue
-      fi
-
-      tmp=$(mktemp "$SANDBOX_CACHE/.$id.XXXXXX")
-      jq -Rrn --slurpfile s "$session" '$s[0] as $s | '"$SEATBELT_JQ" "$stream" |
-        own_processes >"$tmp"
-      mv "$tmp" "$SANDBOX_CACHE/$id.tsv"
-    done
-    rm "$stream"
-  done
-}
-
-sandbox() {
-  local root=""
-  if [ "$scope" = repo ]; then
-    root=$(repo_root) || die "not inside a repository, use --all"
-  fi
-
-  { cat "$SANDBOX_CACHE"/*.tsv 2>/dev/null || true; } |
-    awk -F '\t' -v root="$root" -v since="$since" '
-      (root == "" || $4 == root || index($4, root "/") == 1) && $3 >= since
-    ' |
-    sort -t $'\t' -k5,5 -rn
-}
-
 while [ $# -gt 0 ]; do
   case "$1" in
   --all) scope=all ;;
@@ -328,10 +211,7 @@ case "${1:-}" in
 list) list ;;
 errors) failures "${2:-}" | print_failures all ;;
 denials) failures "${2:-}" | print_failures denials ;;
-sandbox) sandbox ;;
 prompts) prompts "${2:-}" ;;
 corrections) prompts "${2:-}" | awk -F '\t' -v re="$CORRECTION_PATTERN" 'tolower($5) ~ re' ;;
-record) record ;;
-collect) collect ;;
 *) usage ;;
 esac

@@ -1,7 +1,6 @@
 command_timeout = 1000
 
 format = """
-${env_var.PROMPT_AGENTVM}\
 ${env_var.PROMPT_DIRNAME}\
 $character"""
 
@@ -79,14 +78,7 @@ deleted = '[-${count}](red) '
 modified = '[!${count}](red) '
 renamed = '[»${count}](yellow) '
 
-# The shield that WezTerm and the picker put on agent VM panes, in the
-# VM itself, which the image marks with /etc/agentvm. Fish sets these
-# variables in tools.fish, because a custom module spawns a shell on every
-# prompt.
-[env_var.PROMPT_AGENTVM]
-symbol = ' '
-style = 'bold yellow'
-format = '[$symbol]($style)'
-
+# Fish sets these variables in tools.fish, because a custom module spawns a
+# shell on every prompt.
 [env_var.PROMPT_DIRNAME]
 format = '[$env_value](bold cyan) '

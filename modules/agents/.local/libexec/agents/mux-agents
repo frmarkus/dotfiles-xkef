@@ -47,10 +47,6 @@ fi
 readonly ICON_WAITING='•'
 readonly ICON_BUSY='◦'
 readonly ICON_IDLE='·'
-# The shield marks an agent in the agent VM, as tab titles and the status
-# line do.
-readonly SANDBOX_MARK=''
-
 # Sort ranks: needs input first, working next, idle last.
 readonly RANK_WAITING=0
 readonly RANK_BUSY=1
@@ -58,13 +54,11 @@ readonly RANK_IDLE=2
 
 # Emits tab-separated rank, pane, target, state, agent, tool, age, dir, and task.
 collect() {
-  local now pane target agent state tool epoch cwd task rank age sandboxed
+  local now pane target agent state tool epoch cwd task rank age
   now=$(date +%s)
-  sandboxed=" $(sandbox_panes | tr '\n' ' ') "
 
   while IFS=$'\t' read -r pane target agent state tool epoch cwd task; do
     age=$(human_age $((now - epoch)))
-    [[ "$sandboxed" == *" $pane "* ]] && agent="$SANDBOX_MARK $agent"
 
     case "$state" in
     waiting) rank=$RANK_WAITING ;;
@@ -91,18 +85,6 @@ join_panes() {
       if (pane in entry) { print pane, substr($0, split_at + 1), entry[pane] }
     }
   ' <("$LIBEXEC/agent-state" list "$MUX") <(live_panes)
-}
-
-# Emits the id of every pane that runs in the agent VM. In WezTerm the
-# pane reports an agentvm host through OSC 7, and in tmux `agents vm`
-# sets the @agentvm pane option.
-sandbox_panes() {
-  if [ "$MUX" = tmux ]; then
-    tmux list-panes -a -F '#{pane_id} #{@agentvm}' | awk '$2 == 1 { print $1 }'
-  else
-    wezterm cli list --format json |
-      jq -r '.[] | select(.cwd | startswith("file://agentvm")) | .pane_id'
-  fi
 }
 
 # Emits "pane target" for every live pane. A target reads "workspace:tab"

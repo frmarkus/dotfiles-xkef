@@ -4,7 +4,6 @@
 local wezterm = require("wezterm")
 local act = wezterm.action
 local copymode = require("copymode")
-local vm = require("vm")
 
 local M = {}
 
@@ -21,7 +20,7 @@ local SHARED = {
   { key = "c", mods = "CTRL|SHIFT", action = copymode.copy(act.CopyTo("Clipboard")) },
   { key = "v", mods = "CTRL|SHIFT", action = act.PasteFrom("Clipboard") },
   { key = "n", mods = "CTRL|SHIFT", action = act.SpawnWindow },
-  { key = "t", mods = "CTRL|SHIFT", action = vm.tab(act.SpawnTab("CurrentPaneDomain")) },
+  { key = "t", mods = "CTRL|SHIFT", action = act.SpawnTab("CurrentPaneDomain") },
   { key = "w", mods = "CTRL|SHIFT", action = act.CloseCurrentPane({ confirm = false }) },
   { key = "phys:Equal", mods = "CTRL|SHIFT", action = act.IncreaseFontSize },
   { key = "phys:Minus", mods = "CTRL|SHIFT", action = act.DecreaseFontSize },
@@ -34,7 +33,7 @@ local SHARED = {
 -- macOS Cmd bindings.
 local MAC = {
   { key = "c", mods = "SUPER", action = copymode.copy(act.CopyTo("Clipboard")) },
-  { key = "v", mods = "SUPER", action = vm.paste(act.PasteFrom("Clipboard")) },
+  { key = "v", mods = "SUPER", action = act.PasteFrom("Clipboard") },
   { key = "v", mods = "SUPER|SHIFT", action = act.PasteFrom("PrimarySelection") },
   { key = "=", mods = "SUPER", action = act.IncreaseFontSize },
   { key = "+", mods = "SUPER", action = act.IncreaseFontSize },
@@ -45,7 +44,7 @@ local MAC = {
   { key = "i", mods = "SUPER|ALT", action = act.ShowDebugOverlay },
 
   { key = "n", mods = "SUPER", action = act.SpawnWindow },
-  { key = "t", mods = "SUPER", action = vm.tab(act.SpawnTab("CurrentPaneDomain")) },
+  { key = "t", mods = "SUPER", action = act.SpawnTab("CurrentPaneDomain") },
   { key = "w", mods = "SUPER", action = act.CloseCurrentPane({ confirm = false }) },
   { key = "w", mods = "SUPER|ALT", action = act.CloseCurrentTab({ confirm = false }) },
   { key = "q", mods = "SUPER", action = act.QuitApplication },
@@ -60,8 +59,8 @@ local MAC = {
   { key = "}", mods = "SUPER|SHIFT", action = act.ActivateTabRelative(1) },
   { key = "9", mods = "SUPER", action = act.ActivateTab(-1) },
 
-  { key = "d", mods = "SUPER", action = vm.split(act.SplitHorizontal({ domain = "CurrentPaneDomain" }), "Right") },
-  { key = "d", mods = "SUPER|SHIFT", action = vm.split(act.SplitVertical({ domain = "CurrentPaneDomain" }), "Down") },
+  { key = "d", mods = "SUPER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+  { key = "d", mods = "SUPER|SHIFT", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
   { key = "Enter", mods = "SUPER|SHIFT", action = act.TogglePaneZoomState },
   { key = "[", mods = "SUPER", action = act.ActivatePaneDirection("Prev") },
   { key = "]", mods = "SUPER", action = act.ActivatePaneDirection("Next") },

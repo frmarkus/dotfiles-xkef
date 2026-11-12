@@ -52,7 +52,6 @@ makefile
 mindmaps?
 misroutes
 neovim
-nono
 npm
 pacman
 paru

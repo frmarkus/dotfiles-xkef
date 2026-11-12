@@ -234,8 +234,6 @@ async function readOpenRouterUsage(
   ctx: ExtensionContext,
   signal: AbortSignal,
 ): Promise<UsageStatus | undefined> {
-  // In the sandbox the key is nono's placeholder, which the credential
-  // proxy swaps for the real key.
   const apiKey = await ctx.modelRegistry.getApiKeyForProvider(OPENROUTER_PROVIDER);
   if (!apiKey || signal.aborted) {
     return undefined;

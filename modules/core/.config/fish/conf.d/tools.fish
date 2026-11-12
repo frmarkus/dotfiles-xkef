@@ -10,8 +10,7 @@ status is-interactive; or return
 __cached_init starship init fish --print-full-init
 
 # Feeds the starship env_var modules, so the prompt spawns no shell for
-# the directory name or the agent VM mark.
-test -e /etc/agentvm; and set -gx PROMPT_AGENTVM 1
+# the directory name.
 
 function __prompt_dirname --on-variable PWD
     set -gx PROMPT_DIRNAME (path basename -- $PWD)

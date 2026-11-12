@@ -1,32 +1,22 @@
 # Agent launchers. Each function installs its agent on first use, then runs
-# it through `sb`. `command <agent>` skips both.
+# it. `command <agent>` skips both.
 
-function claude --wraps claude --description "Claude Code in a nono sandbox"
+function claude --wraps claude --description "Claude Code"
     if not command -q claude
         printf '  Installing claude...\n'
         curl -fsSL https://claude.ai/install.sh | bash -s -- latest; or return
     end
-    # `claude update` writes a new version under ~/.local/share/claude and
-    # replaces the ~/.local/bin/claude symlink. The profile grants neither,
-    # and widening it would let the agent replace its own binary and every
-    # other user tool in ~/.local/bin. `claude setup-token` mints the token
-    # the credential proxy injects, so it runs on the host, where its OAuth
-    # callback server may listen.
-    if contains -- "$argv[1]" update setup-token
-        command claude $argv
-        return
-    end
-
-    sb claude $argv
+    ~/.local/libexec/agents/agent-skills ensure claude
+    command claude $argv
     set -l rc $status
 
     # The agent may exit without removing its agent-state entry: a crash or
-    # a killed sandbox.
+    # a killed process.
     ~/.local/libexec/agents/agent-state clear
     return $rc
 end
 
-function pi --wraps pi --description "pi.dev coding agent in a nono sandbox"
+function pi --wraps pi --description "pi.dev coding agent"
     if not command -q pi
         printf '  Installing pi...\n'
         # The version the extensions type-check against.
@@ -43,11 +33,12 @@ function pi --wraps pi --description "pi.dev coding agent in a nono sandbox"
         theme --apply >/dev/null
     end
 
-    sb pi $argv
+    ~/.local/libexec/agents/agent-skills ensure pi
+    command pi $argv
     set -l rc $status
 
     # The agent may exit without removing its agent-state entry: a crash or
-    # a killed sandbox.
+    # a killed process.
     ~/.local/libexec/agents/agent-state clear
     return $rc
 end

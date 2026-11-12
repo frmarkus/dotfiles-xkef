@@ -3,7 +3,6 @@
 -- holds the Cmd and Ctrl-Shift bindings, and these add to them.
 local wezterm = require("wezterm")
 local act = wezterm.action
-local vm = require("vm")
 local picker = require("picker")
 local workspaces = require("workspaces")
 local path = require("path")
@@ -140,8 +139,8 @@ function M.apply(config)
     repeatable("L", resize("L", "Right")),
 
     -- @key wezterm :: | / - :: Split right / down
-    { key = "|", mods = "LEADER", action = vm.split(act.SplitHorizontal({ domain = "CurrentPaneDomain" }), "Right") },
-    { key = "-", mods = "LEADER", action = vm.split(act.SplitVertical({ domain = "CurrentPaneDomain" }), "Down") },
+    { key = "|", mods = "LEADER", action = act.SplitHorizontal({ domain = "CurrentPaneDomain" }) },
+    { key = "-", mods = "LEADER", action = act.SplitVertical({ domain = "CurrentPaneDomain" }) },
     -- @key wezterm :: z :: Toggle pane zoom
     { key = "z", mods = "LEADER", action = act.TogglePaneZoomState },
     -- @key wezterm :: x :: Close pane
@@ -152,7 +151,7 @@ function M.apply(config)
     { key = "m", mods = "LEADER", action = act.PaneSelect({ mode = "SwapWithActive" }) },
 
     -- @key wezterm :: c :: New tab
-    { key = "c", mods = "LEADER", action = vm.tab(act.SpawnTab("CurrentPaneDomain")) },
+    { key = "c", mods = "LEADER", action = act.SpawnTab("CurrentPaneDomain") },
     -- @key wezterm :: n / p :: Next / previous tab (repeatable)
     repeatable("n", act.ActivateTabRelative(1)),
     repeatable("p", act.ActivateTabRelative(-1)),

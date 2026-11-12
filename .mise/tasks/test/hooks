@@ -24,7 +24,7 @@ printf -v trailer '%s-%s' Claude Session
 expect() {
   local want=$1 cwd=$2 command=$3 status=0
   jq -n --arg command "$command" --arg cwd "$cwd" '{tool_input: {command: $command}, cwd: $cwd}' |
-    env -u NONO_CAP_FILE "$guard" 2>/dev/null || status=$?
+    "$guard" 2>/dev/null || status=$?
   case "$want:$status" in
   allow:0 | block:2) ;;
   *)
@@ -80,19 +80,6 @@ for command in 'git log' 'git show HEAD' 'jj log' 'rg "git add" .' \
   'jj describe -m "drop git stash"'; do
   expect allow "$repo" "$command"
 done
-
-# dangerouslyDisableSandbox passes without nono and blocks under it.
-input='{"tool_input": {"command": "ls", "dangerouslyDisableSandbox": true}}'
-printf '%s' "$input" | env -u NONO_CAP_FILE "$guard" 2>/dev/null || {
-  echo "dangerouslyDisableSandbox blocked without nono" >&2
-  failed=1
-}
-status=0
-printf '%s' "$input" | NONO_CAP_FILE=/x "$guard" 2>/dev/null || status=$?
-[ "$status" = 2 ] || {
-  echo "dangerouslyDisableSandbox passed under nono" >&2
-  failed=1
-}
 
 [ "$failed" = 0 ] || exit 1
 echo "hooks ok"

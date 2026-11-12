@@ -21,13 +21,11 @@ Each step can run again without harm, so a rerun repairs whatever drifted.
 `dots diff` prints the link changes without making them.
 
 The machine's state lives in `~/.local/state/dotfiles`, which the repo links as
-`state/`, next to the agent VM's state at `~/.local/state/agentvm`, linked as
-`vm/`:
+`state/`:
 
 - `modules` selects the modules under `modules/`. A machine gets `core`,
-  `desktop`, and `agents`, plus `agentvm` on macOS, and the agent VM gets `core`
-  and `agents`. The extras `wezterm`, `rex`, `helix`, `zed`, and `kickstart` go
-  in by hand.
+  `desktop`, and `agents`. The extras `wezterm`, `rex`, `helix`, `zed`, and
+  `kickstart` go in by hand.
 - `links` lists every link the last run made, so a file removed from the repo
   loses its link.
 - `backup/` holds the files that stood where a link goes.
@@ -45,9 +43,8 @@ The machine's state lives in `~/.local/state/dotfiles`, which the repo links as
 | [Rex](https://www.superlogical.com/rex)                                            | Extra: multiplexer app in beta, on the tmux keys           |
 | [television](https://github.com/alexpasmantier/television)                         | Fuzzy finder in the shell and the pickers                  |
 | [atuin](https://atuin.sh)                                                          | Searchable local shell history                             |
-| [Claude Code](https://claude.com/claude-code), [pi](https://pi.dev)                | AI coding agents, always launched in a nono sandbox        |
+| [Claude Code](https://claude.com/claude-code), [pi](https://pi.dev)                | AI coding agents                                           |
 | [Jujutsu](https://github.com/jj-vcs/jj)                                            | Git-compatible version control, `jj`, with a simpler model |
-| [container](https://github.com/apple/container)                                    | Sandbox VM for agents, with no network device             |
 | [Vale](https://vale.sh)                                                            | Prose linter for markdown, Google style plus AI-tell rules |
 | eza, bat, fd, ripgrep, zoxide, yazi, mise                                          | Command-line replacements and workflow tools               |
 
@@ -57,20 +54,7 @@ Neovim uses `Space` as leader, and WezTerm and tmux use `Ctrl-Space`. `leader ?`
 lists the bindings. `dots theme` switches the colors of every themed tool at
 once.
 
-## Agent sandbox
-
-`claude` and `pi` start in a [nono](https://nono.sh) sandbox, whose credential
-proxy adds the Claude and GitHub tokens to requests. `agents vm` runs Claude
-Code in a VM with no network device, which reaches only the same proxy.
-`agents vm update` builds its image. Store the tokens once:
-
-```sh
-claude setup-token  # then store its output:
-security add-generic-password -s nono -a claude_code_oauth_token -w
-security add-generic-password -s nono -a github-<gh user> -w
-security add-generic-password -s nono -a openrouter_api_key -w  # pi
-# Linux: secret-tool store --label=nono service nono account github-<gh user>
-```
+## Agents
 
 pi starts on DeepSeek V4.1 Flash through OpenRouter. Its footer shows the
 session's cost, and the status line shows the key's spend today and this month.

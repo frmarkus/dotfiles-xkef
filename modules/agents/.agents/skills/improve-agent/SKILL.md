@@ -22,37 +22,25 @@ Run from the repository root:
 agents trace --since <date> list      # one row per session
 agents trace --since <date> errors    # every failed tool call
 agents trace --since <date> denials   # failures that read like a denial
-agents trace --since <date> sandbox   # Seatbelt denials the tools never reported
 ```
 
 `agents trace` without arguments prints its usage. Transcripts live at
 `~/.claude/projects/<cwd with non-alphanumerics as ->/<id>.jsonl`, with subagent
-transcripts under `<id>/subagents/`. Agent VM sessions live under
-`~/.local/state/agentvm/copies/<repository>/home/.claude/projects/` in the same
-layout.
-
-The environment column separates this machine from `agentvm`. They differ: nono
-confines the agent here and prompts guard its tools, while the VM alone confines
-it in the agent VM and prompts stay off. There a blocked read shows up as
-`No such file or directory` on a host path the VM doesn't share, not as a
-permission error.
+transcripts under `<id>/subagents/`.
 
 ## 2. Analyze
 
 Work through all five. Each ends with findings, or with "none" and the signals
 you checked.
 
-1. **Blocked reads:** group `denials` and `sandbox` rows by path. Grant each
-   path the task needs, list a harmless probe as noise, and point a wrong
-   approach to where the agent should look instead. A silent denial, such as a
-   tool skipping its config file, matters most: the tool gives wrong results
-   without a visible cause.
-2. **Wrong permissions:** for the sandbox, map each needed path to the nono
-   profile (`~/.config/nono/profiles/<profile>.json`, whose source sits in the
-   dotfiles repository) and write the missing entry. For Claude's permissions,
-   find rejected tool calls (`doesn't want to proceed`), interrupts
-   (`Request interrupted by user`), and hook blocks in the transcripts. Decide
-   per case whether to fix the rule or the agent.
+1. **Blocked reads:** group `denials` rows by path. Grant each path the task
+   needs, list a harmless probe as noise, and point a wrong approach to where
+   the agent should look instead. A silent denial, such as a tool skipping its
+   config file, matters most: the tool gives wrong results without a visible
+   cause.
+2. **Wrong permissions:** find rejected tool calls (`doesn't want to proceed`),
+   interrupts (`Request interrupted by user`), and hook blocks in the
+   transcripts. Decide per case whether to fix the rule or the agent.
 3. **Confusing code:** look for files read or searched again and again within a
    session, searches that found nothing, reads of missing paths, failed edits
    (`String to replace not found`, `File has not been read yet`), and user
@@ -77,6 +65,5 @@ you can't confirm.
 
 Write the report to `.claude-notes/agent-review-<date>.md` with one section per
 analysis. Each finding states what happened, its evidence, the proposed change
-as a diff or rule, and whether it affects this machine, the agent VM, or both.
-Show the user a summary and apply nothing until they choose which changes to
-make.
+as a diff or rule, and whether it affects this machine. Show the user a summary
+and apply nothing until they choose which changes to make.

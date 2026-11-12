@@ -9,9 +9,6 @@
 #   repository. In a colocated repository Git works too, so agents reach for
 #   the Git commands they know, and jj then sees a rewritten history it
 #   didn't make. Read-only commands such as `git show` and `git log` pass.
-# - dangerouslyDisableSandbox under nono. sb turns Claude Code's own sandbox
-#   off inside nono, so the flag lifts nothing there. nono still blocks the
-#   command, and the auto-mode classifier may deny the attempt.
 #
 # A hook blocks at the tool boundary, which no prompt can talk its way past.
 #
@@ -25,8 +22,7 @@
 # since a message or a search pattern often names a Git command.
 #
 # A Git alias in a repository's .git/config, which the agent can write, can
-# still run a push under another name. The nono profiles can't make that
-# file read-only.
+# still run a push under another name.
 
 readonly JJ_MUTATING=' add am branch checkout cherry-pick clean commit merge pull push rebase reset restore revert rm stash switch tag '
 
@@ -48,13 +44,8 @@ block() {
 
 eval "$(jq -r '
   @sh "COMMAND=\(.tool_input.command // "")",
-  @sh "CWD=\(.cwd // "")",
-  @sh "UNSANDBOXED=\(.tool_input.dangerouslyDisableSandbox == true)"
+  @sh "CWD=\(.cwd // "")"
 ')"
-
-if [ -n "${NONO_CAP_FILE:-}" ] && [ "$UNSANDBOXED" = true ]; then
-  block "nono confines this session, and dangerouslyDisableSandbox has no effect under it. Hand the command to the user for a separate terminal."
-fi
 
 [ -n "$COMMAND" ] || exit 0
 

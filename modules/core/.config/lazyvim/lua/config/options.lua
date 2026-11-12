@@ -1,7 +1,7 @@
--- Over SSH and in the agent VM, yanks reach the host clipboard through
--- OSC 52. WezTerm ignores OSC 52 reads, so a put returns the last yank
--- instead of waiting 10 seconds for a reply. Cmd-V pastes from the host.
-if vim.env.SSH_TTY or vim.uv.fs_stat("/etc/agentvm") then
+-- Over SSH, yanks reach the host clipboard through OSC 52. WezTerm ignores
+-- OSC 52 reads, so a put returns the last yank instead of waiting 10 seconds
+-- for a reply. Cmd-V pastes from the host.
+if vim.env.SSH_TTY then
   local osc52 = require("vim.ui.clipboard.osc52")
   local last = { {}, "v" }
   local function copy(reg)

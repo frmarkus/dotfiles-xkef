@@ -18,8 +18,7 @@ set -gx WRANGLER_SEND_METRICS false
 # Skip package versions published in the last 7 days. Malicious releases
 # are usually reported and pulled within that window. npm counts days and
 # pnpm counts minutes. mise and uv set theirs in their config files. The
-# linked ~/.npmrc sets npm's for programs not started from fish. The nono
-# sandbox hides that file, so the agents rely on this variable.
+# linked ~/.npmrc sets npm's for programs not started from fish.
 set -gx npm_config_min_release_age 7
 set -gx pnpm_config_minimum_release_age 10080
 

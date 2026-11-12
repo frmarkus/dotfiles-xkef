@@ -16,8 +16,8 @@ failure in the conversation. Collect from the conversation alone:
 
 - The failing command or tool call, and its exact error line.
 - The task the session worked on when it failed.
-- The place the fix most likely goes. Pick from permissions, the nono profile,
-  tools, hooks, skills, and `AGENTS.md`, or write `unknown`.
+- The place the fix most likely goes. Pick from permissions, tools, hooks,
+  skills, and `AGENTS.md`, or write `unknown`.
 - The session ID, which names the newest transcript in
   `~/.claude/projects/<working directory, non-alphanumerics as ->/`.
 

@@ -38,9 +38,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
-      # The nono test skips without nono, so macOS installs it.
       - name: Install fish
-        run: if [ "$RUNNER_OS" = Linux ]; then sudo apt-get update && sudo apt-get install -y fish; else brew install fish nono; fi
+        run: if [ "$RUNNER_OS" = Linux ]; then sudo apt-get update && sudo apt-get install -y fish; else brew install fish; fi
       # The dots test runs jj in a scratch repo outside this checkout, where
       # the mise shim finds a jj version only in the global config.
       - name: Install jj

@@ -5,9 +5,8 @@
 /.claude/
 /.claude-notes/
 
-# setup/apply links the machine's state here, and the agent VM's state
+# setup/apply links the machine's state here
 /state
-/vm
 
 # Restored by setup/private/decrypt
 /mise.local.toml

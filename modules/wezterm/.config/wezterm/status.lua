@@ -2,7 +2,6 @@
 -- color names an ANSI slot, so a `theme` switch recolors the bar with
 -- the terminal.
 local wezterm = require("wezterm")
-local vm = require("vm")
 local path = require("path")
 local copymode = require("copymode")
 
@@ -105,33 +104,25 @@ local function update(window, pane)
   end
   table.insert(right, { Foreground = { AnsiColor = "Grey" } })
   table.insert(right, { Text = wezterm.strftime("%H:%M") .. "  " })
-  -- The host the active pane runs on, marked while it's the agent VM.
-  local host, color = wezterm.hostname(), "Teal"
-  if vm.in_vm(pane) then
-    host, color = vm.MARK .. " " .. vm.HOST, "Maroon"
-  end
-  table.insert(right, { Foreground = { AnsiColor = color } })
+  table.insert(right, { Foreground = { AnsiColor = "Teal" } })
   table.insert(right, { Attribute = { Intensity = "Bold" } })
-  table.insert(right, { Text = host .. " " })
+  table.insert(right, { Text = wezterm.hostname() .. " " })
   window:set_right_status(wezterm.format(right))
 end
 
 -- A tab reads " index:name ", named by program(): a gap of spaces, then
 -- the active tab reversed on blue and the others grey, or olive after
--- unseen output. A tab whose active pane runs in the agent VM adds the
--- shield and takes maroon for blue.
+-- unseen output.
 local function tab_title(tab, background)
   local pane = tab.active_pane
-  local sandbox = vm.info_in_vm(pane)
-  local mark = sandbox and vm.MARK .. " " or ""
-  local text = " " .. tab.tab_index + 1 .. ":" .. mark .. program(pane) .. " "
+  local text = " " .. tab.tab_index + 1 .. ":" .. program(pane) .. " "
   local gap = { { Background = { Color = background } }, { Text = TAB_GAP } }
 
   if tab.is_active then
     return {
       gap[1],
       gap[2],
-      { Background = { AnsiColor = sandbox and "Maroon" or "Navy" } },
+      { Background = { AnsiColor = "Navy" } },
       { Foreground = { Color = background } },
       { Attribute = { Intensity = "Bold" } },
       { Text = text },
@@ -144,7 +135,7 @@ local function tab_title(tab, background)
   return {
     gap[1],
     gap[2],
-    { Foreground = { AnsiColor = unseen and "Olive" or sandbox and "Maroon" or "Grey" } },
+    { Foreground = { AnsiColor = unseen and "Olive" or "Grey" } },
     { Text = text },
   }
 end

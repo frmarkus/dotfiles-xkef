@@ -1,28 +1,12 @@
 # Sandbox restrictions
 
-This session may run inside a nono sandbox, Seatbelt on macOS or Landlock on
-Linux. It denies by default but also grants:
+Claude Code's own sandbox may confine this session. Don't assume a path is
+off-limits without trying. A real denial is an ordinary permission error. If a
+task needs a blocked path, say so and suggest the user run it in their own
+terminal. Quote the actual denial before you name a sandbox as the cause.
 
-- The agent's own configuration and state directories.
-- Read access to toolchain and config paths such as mise, cargo, npm, jj, and
-  gh.
-- A sandbox-only toolchain home under `$XDG_CACHE_HOME/agents-sandbox`, where
-  `CARGO_HOME`, `RUSTUP_HOME`, `GOPATH`, uv, the npm cache, and the Maven
-  repository point. A fresh home needs `rustup default stable` once.
-
-Installs into the host's `PATH` directories, such as `mise install`, fail by
-design, and so does `jj config set --repo`. Ask the user to run them. The
-keychain stays denied. nono's credential proxy injects the Claude and GitHub
-tokens, so `gh` and `git push` over HTTPS work with the placeholder `GH_TOKEN`.
-
-Don't assume a path is off-limits without trying. A real denial is an ordinary
-permission error, which `nono why --path <p> --op read` explains. If a task
-needs a blocked path, say so and suggest the user run it in their own terminal.
-
-When `NONO_CAP_FILE` is set, never pass `dangerouslyDisableSandbox`. It has no
-effect and `!` commands stay confined. Without nono, Claude Code's sandbox
-applies and that flag lifts it. Check the variable and quote the actual denial
-before you name a sandbox as the cause.
+Installs into the host's `PATH` directories, such as `mise install`, and
+`jj config set --repo` can fail. Ask the user to run them.
 
 # Never use `/tmp`
 
