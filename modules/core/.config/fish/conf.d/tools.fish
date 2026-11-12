@@ -28,9 +28,6 @@ function __zoxide_first_cmd --on-event fish_preexec
     functions -q __zoxide_hook; and __zoxide_hook
 end
 
-# The 1Password CLI completion costs about 108ms at startup, so it stays
-# out. fish loads it on the first `op` command.
-
 # ── Modern replacements ──────────────────────────────
 # Each alias exists only when its tool is installed, so the base command
 # stays reachable. This file sorts after env.fish, which sets PATH.

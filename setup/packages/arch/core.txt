@@ -4,7 +4,6 @@ xdg-utils       # xdg-open for the tmux and WezTerm URL pickers
 less            # pager (used as $PAGER)
 github-cli      # GitHub from the command line
 jq              # JSON processor
-age             # simple file encryption
 fish            # shell
 starship        # cross-shell prompt
 atuin           # shell history search

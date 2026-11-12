@@ -9,7 +9,6 @@ Linux. It denies by default but also grants:
 - A sandbox-only toolchain home under `$XDG_CACHE_HOME/agents-sandbox`, where
   `CARGO_HOME`, `RUSTUP_HOME`, `GOPATH`, uv, the npm cache, and the Maven
   repository point. A fresh home needs `rustup default stable` once.
-- The 1Password SSH agent socket, for commit signing.
 
 Installs into the host's `PATH` directories, such as `mise install`, fail by
 design, and so does `jj config set --repo`. Ask the user to run them. The

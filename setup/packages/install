@@ -42,7 +42,7 @@ install_darwin() {
     fi
 
     # Formulae must install, and casks fail soft. Self-updating GUI apps
-    # such as zed and 1password hit stale-receipt and quarantine issues that
+    # such as zed hit stale-receipt and quarantine issues that
     # must not block the apply.
     list "$brewfile" | { grep -v '^cask ' || :; } >"$split/$module.formulae.Brewfile"
     list "$brewfile" | { grep '^cask ' || :; } >"$split/$module.casks.Brewfile"

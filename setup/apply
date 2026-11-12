@@ -17,7 +17,6 @@ set -q XDG_STATE_HOME; and set state $XDG_STATE_HOME/dotfiles
 set -l pipeline \
     packages "install each module's package list" \
     links "link modules/<module>/ into ~" \
-    private "unpack private/home.tar.age (desktop)" \
     agents "link the shared skills, seed pi settings (agents)" \
     system "file modes, sockets, and jj in this checkout" \
     macos "apply the macOS defaults (desktop on macOS)" \
@@ -31,7 +30,7 @@ set -l pipeline \
 # hand.
 #
 #   core       shell, Neovim, tmux, version control, and CLI tools
-#   desktop    GUI apps, the 1Password SSH agent, and Ghostty
+#   desktop    GUI apps and Ghostty
 #   agents     Claude Code, pi, and their nono sandbox
 #   agentvm    a sandbox VM for agents, on macOS
 #   wezterm    WezTerm, an alternative to Ghostty and tmux
@@ -75,19 +74,6 @@ function step_links
     $repo/setup/link $state $modules
 end
 
-# The age key comes from 1Password, which only desktop installs. The
-# archive can restore hooks for setup that would expose private details
-# in this repo, such as logins with credentials from 1Password.
-function step_private
-    selected desktop; or return 0
-    $repo/setup/private/decrypt; or return
-    for hook in ~/.config/dotfiles/post-deploy.d/*
-        if test -f $hook
-            bash $hook; or return
-        end
-    end
-end
-
 # Claude Code reads the shared skills through ~/.claude/skills, a
 # directory link, which setup/link doesn't make. pi rewrites its
 # settings.json at runtime, so the repo's copy only seeds a new one.
@@ -113,14 +99,6 @@ function step_system
     set -l mise_cache ~/.cache/mise
     set -q XDG_CACHE_HOME; and set mise_cache $XDG_CACHE_HOME/mise
     mkdir -p $mise_cache; and chmod 700 $mise_cache; or return
-
-    # ssh, git signing, and WezTerm find the 1Password agent at the
-    # Linux path, so one path serves both systems.
-    if selected desktop; and test (uname -s) = Darwin
-        set -l group ~/Library/Group\ Containers/2BUA8C4S2C.com.1password
-        mkdir -p ~/.1password
-        ln -sfn $group/t/agent.sock ~/.1password/agent.sock; or return
-    end
 
     # Docker clients reach podman through its user socket on Linux,
     # which conf.d/podman.fish exports as DOCKER_HOST. On macOS the

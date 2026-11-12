@@ -22,13 +22,13 @@ filter_mode = "workspace"
 command_chaining = true
 
 # Keep credentials out of history. secrets_filter (on by default)
-# catches known token formats, age keys and 1Password tokens among them.
+# catches known token formats, age keys among them.
 # These patterns catch secrets without a known format, passed inline:
 #
 #   API_KEY=abc cmd             set -x GH_TOKEN abc
 #   cmd --password abc          sshpass -p abc, mysql -pabc, x login -p abc
 #   curl -u user:abc            openssl -passin pass:abc, ssh-keygen -N abc
-#   security add-... -w abc     op item edit x 'pw[password]=abc'
+#   security add-... -w abc
 #   kubectl create secret ... --from-literal, gh secret set -b, sops --set
 #   echo abc | x login --password-stdin
 #

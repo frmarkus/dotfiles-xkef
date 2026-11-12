@@ -2,7 +2,5 @@ xclip                   # X11 clipboard utility
 wl-clipboard            # Wayland clipboard utility
 ghostty                 # terminal, for tmux sessions
 neovide                 # GUI client for Neovim
-1password               # password manager
-1password-cli           # 1Password CLI (op)
 handy-bin               # offline speech-to-text app (AUR, x86_64 only)
 ttf-jetbrains-mono-nerd # patched dev font with icons

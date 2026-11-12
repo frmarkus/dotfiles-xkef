@@ -18,7 +18,7 @@ Bootstrap installs the `core` packages, which bring fish, then runs
 `setup/apply`. After that, `dots apply` runs it again. Each run prints its
 pipeline, which [`setup/apply`](setup/apply) lists, and then works through it.
 Each step can run again without harm, so a rerun repairs whatever drifted.
-`dots diff` prints the link changes without making them.
+~/dotfiles/setup/bootstrap`dots diff` prints the link changes without making them.
 
 The machine's state lives in `~/.local/state/dotfiles`, which the repo links as
 `state/`, next to the agent VM's state at `~/.local/state/agentvm`, linked as
@@ -74,15 +74,6 @@ security add-generic-password -s nono -a openrouter_api_key -w  # pi
 
 pi starts on DeepSeek V4.1 Flash through OpenRouter. Its footer shows the
 session's cost, and the status line shows the key's spend today and this month.
-
-## Private files
-
-Private files, such as the git identity, live in `private/home.tar.age`, an
-[age](https://age-encryption.org) archive whose key sits in 1Password. A desktop
-apply unpacks it into `$HOME`, next to the configs that include each file.
-`mise run encrypt <file>` adds or updates one and signs the archive with git's
-signing key. The apply refuses an archive without a signature from a key in
-`private/allowed_signers`.
 
 ## Credits
 

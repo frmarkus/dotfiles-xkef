@@ -3,7 +3,6 @@ brew "less"                 # pager (used as $PAGER)
 brew "curl"                 # URL data transfer with post-quantum TLS (keg-only, PATH in env.fish)
 brew "gh"                   # GitHub from the command line
 brew "jq"                   # JSON processor
-brew "age"                  # simple file encryption
 brew "fish"                 # shell
 brew "starship"             # cross-shell prompt
 brew "atuin"                # shell history search

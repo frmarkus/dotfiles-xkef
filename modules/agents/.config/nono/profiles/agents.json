@@ -46,10 +46,6 @@
       "$XDG_STATE_HOME/agents",
       "$XDG_CACHE_HOME/agents-sandbox"
     ],
-    "bypass_protection": [
-      "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock",
-      "$HOME/.1password/agent.sock"
-    ],
     "read": [
       "$HOME/.agents",
       "$HOME/.local/libexec/agents",
@@ -63,10 +59,6 @@
       "$XDG_STATE_HOME/theme",
       "$XDG_CONFIG_HOME/nono/profiles",
       "$HOME/.m2/settings.xml"
-    ],
-    "unix_socket": [
-      "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock",
-      "$HOME/.1password/agent.sock"
     ]
   },
   "groups": {
@@ -78,7 +70,7 @@
     ]
   },
   "meta": {
-    "description": "Base of the claude and pi profiles: shared skills, agent state, the 1Password SSH agent for commit signing, and GitHub through the github profile. Toolchains, their caches, mise's cache, and the Maven repository live in a sandbox-only home, and jj's per-repository config stays read-only, since the host runs what both hold",
+    "description": "Base of the claude and pi profiles: shared skills, agent state, and GitHub through the github profile. Toolchains, their caches, mise's cache, and the Maven repository live in a sandbox-only home, and jj's per-repository config stays read-only, since the host runs what both hold",
     "name": "agents",
     "version": "2.0.0"
   },
